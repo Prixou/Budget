@@ -1,0 +1,21 @@
+{
+  "name": "Pécule – budget personnel",
+  "short_name": "Pécule",
+  "description": "Suivi des dépenses, budgets, comptes, objectifs d'épargne, crédits et simulateurs.",
+  "lang": "fr",
+  "start_url": "./#tableau-de-bord",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f4f7",
+  "theme_color": "#2456c9",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Nouvelle opération", "url": "./#transactions" },
+    { "name": "Budgets", "url": "./#budgets" }
+  ]
+}

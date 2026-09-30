@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Pécule</title>
+    <meta name="description" content="Pécule : application de budget personnel complète. Suivi des dépenses, budgets, comptes, objectifs d'épargne, crédits et simulateurs. Vos données restent dans votre navigateur.">
+    <meta name="theme-color" content="#f2f4f7">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="css/styles.css">
+  </head>
+  <body>
+    <div class="app" id="app" aria-busy="true">
+      <aside class="sidebar" aria-label="Navigation principale">
+        <a class="brand" href="#tableau-de-bord">
+          <span class="brand-mark" aria-hidden="true">P</span>
+          <span><span class="brand-name">Pécule</span><span class="brand-sub">Budget personnel</span></span>
+        </a>
+        <nav id="sidebar-nav"></nav>
+        <div class="sidebar-footer">
+          <button type="button" class="icon-btn" id="privacy-toggle" title="Mode discret : masquer les montants" aria-label="Mode discret"></button>
+          <button type="button" class="icon-btn" id="theme-toggle" title="Basculer clair / sombre" aria-label="Basculer le thème"></button>
+          <button type="button" class="btn btn-primary btn-sm" data-action="add-tx" style="margin-left:auto">+ Opération</button>
+        </div>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <h1 id="page-title">Tableau de bord</h1>
+          <div class="topbar-actions" id="topbar-actions"></div>
+        </header>
+        <div class="view" id="view-wrap">
+          <div id="banners" class="stack-v" hidden></div>
+          <div class="view-content" id="view"></div>
+        </div>
+      </div>
+
+      <nav class="tabbar" id="tabbar" aria-label="Navigation"></nav>
+      <button type="button" class="fab" data-action="add-tx" aria-label="Nouvelle opération">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <noscript><p style="padding:24px">Pécule a besoin de JavaScript pour fonctionner.</p></noscript>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
