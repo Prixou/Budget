@@ -11,8 +11,36 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap">
+    <!-- Polices chargées sans bloquer l'affichage (repli immédiat sur les polices système). -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="css/styles.css">
+    <!-- Tous les modules sont demandés en parallèle au lieu d'être découverts un par un. -->
+    <link rel="modulepreload" href="js/app.js">
+    <link rel="modulepreload" href="js/calc.js">
+    <link rel="modulepreload" href="js/charts.js">
+    <link rel="modulepreload" href="js/components.js">
+    <link rel="modulepreload" href="js/csv.js">
+    <link rel="modulepreload" href="js/defaults.js">
+    <link rel="modulepreload" href="js/demo.js">
+    <link rel="modulepreload" href="js/forms.js">
+    <link rel="modulepreload" href="js/importer.js">
+    <link rel="modulepreload" href="js/insights.js">
+    <link rel="modulepreload" href="js/onboarding.js">
+    <link rel="modulepreload" href="js/store.js">
+    <link rel="modulepreload" href="js/ui.js">
+    <link rel="modulepreload" href="js/utils.js">
+    <link rel="modulepreload" href="js/views/accounts.js">
+    <link rel="modulepreload" href="js/views/budgets.js">
+    <link rel="modulepreload" href="js/views/categories.js">
+    <link rel="modulepreload" href="js/views/dashboard.js">
+    <link rel="modulepreload" href="js/views/debts.js">
+    <link rel="modulepreload" href="js/views/goals.js">
+    <link rel="modulepreload" href="js/views/optimisation.js">
+    <link rel="modulepreload" href="js/views/recurring.js">
+    <link rel="modulepreload" href="js/views/reports.js">
+    <link rel="modulepreload" href="js/views/settings.js">
+    <link rel="modulepreload" href="js/views/tools.js">
+    <link rel="modulepreload" href="js/views/transactions.js">
   </head>
   <body>
     <div class="app" id="app" aria-busy="true">

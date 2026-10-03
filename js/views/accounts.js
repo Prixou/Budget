@@ -2,7 +2,7 @@
 import { accountBalances, balanceSeries, netWorth, totalBalance } from '../calc.js';
 import { chartSlot } from '../charts.js';
 import { kpi } from '../components.js';
-import { ACCOUNT_TYPES } from '../defaults.js';
+import { ACCOUNT_TYPES, REFERENCE, SAVINGS_PRODUCTS } from '../defaults.js';
 import { amountField } from '../forms.js';
 import { adjustBalance, deleteAccount, saveAccount, setCleared, store } from '../store.js';
 import { accountOptions, confirmDialog, emptyState, fieldError, formValues, icon, openModal, options, toast } from '../ui.js';
@@ -27,7 +27,7 @@ const ui = { chartAccount: '' };
 
 export function openAccountForm(account = null) {
   const editing = !!account;
-  const v = { name: '', type: 'courant', initialBalance: 0, includeInTotal: true, archived: false, ...(account || {}) };
+  const v = { name: '', type: 'courant', product: '', initialBalance: 0, includeInTotal: true, archived: false, ...(account || {}) };
   openModal({
     title: editing ? 'Modifier le compte' : 'Nouveau compte',
     size: 'sm',
@@ -37,6 +37,11 @@ export function openAccountForm(account = null) {
         Object.entries(ACCOUNT_TYPES).map(([value, t]) => ({ value, label: t.label })),
         v.type,
       )}</select></label>
+      <label class="field" data-product ${v.type === 'epargne' ? '' : raw('hidden')}><span>Produit d'épargne</span><select class="select" name="product" id="a-product">${options(
+        Object.entries(SAVINGS_PRODUCTS).map(([value, p]) => ({ value, label: `${p.label}${p.rate ? ` · ${String(p.rate).replace('.', ',')} %` : ''}` })),
+        v.product,
+        { placeholder: 'Non précisé' },
+      )}</select><span class="hint">Permet de connaître le taux et le plafond, et d'affiner les conseils. Taux au ${formatDate(REFERENCE.ratesDate)}.</span></label>
       ${amountField({ name: 'initialBalance', label: 'Solde initial', value: v.initialBalance, required: false, hint: 'Solde du compte avant la première opération saisie. Peut être négatif.' })}
       <label class="check"><input type="checkbox" name="includeInTotal" id="a-include" ${v.includeInTotal !== false ? raw('checked') : ''}><span>Inclure dans le solde total</span></label>
       ${editing ? html`<label class="check"><input type="checkbox" name="archived" id="a-archived" ${v.archived ? raw('checked') : ''}><span>Compte clôturé (masqué des listes)</span></label>` : ''}
@@ -46,6 +51,9 @@ export function openAccountForm(account = null) {
       <button type="submit" form="account-form" class="btn btn-primary">${editing ? 'Enregistrer' : 'Créer le compte'}</button>`,
     onMount(el, close) {
       const form = el.querySelector('form');
+      form.elements.type.addEventListener('change', () => {
+        el.querySelector('[data-product]').hidden = form.elements.type.value !== 'epargne';
+      });
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         const values = formValues(form);
@@ -56,6 +64,7 @@ export function openAccountForm(account = null) {
           id: account?.id,
           name: values.name.trim(),
           type: values.type,
+          product: values.type === 'epargne' ? values.product || null : null,
           initialBalance: initial,
           includeInTotal: values.includeInTotal,
           archived: !!values.archived,
@@ -172,12 +181,13 @@ export default {
     const card = (a) => {
       const bal = balances.get(a.id) || 0;
       const pending = (future.get(a.id) || 0) - bal;
+      const product = a.type === 'epargne' ? SAVINGS_PRODUCTS[a.product] : null;
       return html`<article class="card tile">
         <div class="tile-head">
           <span class="acct-icon">${icon(ACCOUNT_TYPES[a.type]?.icon || 'wallet', { size: 20 })}</span>
           <div class="grow">
             <h3>${a.name}</h3>
-            <p class="muted small">${ACCOUNT_TYPES[a.type]?.label || 'Compte'}${a.includeInTotal === false ? ' · hors total' : ''}${a.archived ? ' · clôturé' : ''}</p>
+            <p class="muted small">${product ? product.label : ACCOUNT_TYPES[a.type]?.label || 'Compte'}${a.includeInTotal === false ? ' · hors total' : ''}${a.archived ? ' · clôturé' : ''}</p>
           </div>
           <button type="button" class="icon-btn icon-btn-sm" data-edit-account="${a.id}" aria-label="Modifier ${a.name}">${icon('edit', { size: 16 })}</button>
         </div>
@@ -186,6 +196,8 @@ export default {
           <div><dt>Solde pointé</dt><dd class="money">${formatMoney(cleared.get(a.id) || 0)}</dd></div>
           <div><dt>Opérations ce mois</dt><dd>${counts.get(a.id) || 0}</dd></div>
           ${pending ? html`<div><dt>Opérations futures</dt><dd class="money">${formatMoney(pending, { sign: 'always' })}</dd></div>` : ''}
+          ${product?.rate ? html`<div><dt>Intérêts estimés / an</dt><dd class="money">${formatMoney(Math.round((Math.max(0, bal) * product.rate) / 100))} <span class="muted small">à ${String(product.rate).replace('.', ',')} %</span></dd></div>` : ''}
+          ${product?.cap ? html`<div><dt>Plafond de dépôt</dt><dd class="money">${formatMoney(product.cap, { decimals: false })} <span class="muted small">(${Math.min(100, Math.round((Math.max(0, bal) / product.cap) * 100))} %)</span></dd></div>` : ''}
         </dl>
         <div class="row">
           <a class="btn btn-sm" href="#transactions?account=${a.id}&all=1">${icon('list', { size: 14 })} Opérations</a>

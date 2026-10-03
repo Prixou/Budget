@@ -1,9 +1,9 @@
 // Paramètres : préférences, sauvegarde, restauration, remise à zéro.
-import { CURRENCIES } from '../defaults.js';
+import { CURRENCIES, REFERENCE } from '../defaults.js';
 import { openImportDialog } from '../importer.js';
-import { exportData, importData, loadDemo, store, updateSettings } from '../store.js';
+import { exportData, importData, loadDemo, requestPersistence, storageInfo, store, updateSettings } from '../store.js';
 import { confirmDialog, icon, offerFile, options, pickFile, toast } from '../ui.js';
-import { formatNumber, html, pluralize, raw, todayISO } from '../utils.js';
+import { formatDate, formatMoney, formatNumber, html, pluralize, raw, todayISO } from '../utils.js';
 import { openStartFresh } from '../onboarding.js';
 
 export default {
@@ -13,7 +13,6 @@ export default {
 
   render({ state }) {
     const s = state.settings;
-    const size = new Blob([JSON.stringify(state)]).size;
     return html`
       <div class="grid grid-2">
         <section class="card stack-v">
@@ -38,8 +37,29 @@ export default {
         </section>
 
         <section class="card stack-v">
+          <h2>Profil financier</h2>
+          <p class="muted small">Ces réponses affinent les conseils de la rubrique « Optimisation ».</p>
+          <label class="field"><span>Vos revenus sont</span><select class="select" id="set-stability">${options(
+            [
+              { value: 'stable', label: 'Réguliers (CDI, fonctionnaire, retraite)' },
+              { value: 'variable', label: 'Variables (indépendant, intérim, CDD)' },
+            ],
+            s.incomeStability,
+          )}</select><span class="hint">Épargne de précaution conseillée : ${REFERENCE.emergencyMonthsStable} mois de dépenses avec des revenus réguliers, ${REFERENCE.emergencyMonthsVariable} avec des revenus variables.</span></label>
+          <label class="field"><span>Éligible au LEP ?</span><select class="select" id="set-lep">${options(
+            [
+              { value: 'unknown', label: 'Je ne sais pas' },
+              { value: 'yes', label: 'Oui' },
+              { value: 'no', label: 'Non' },
+            ],
+            s.lepEligible,
+          )}</select><span class="hint">Revenu fiscal de référence 2024 inférieur ou égal à ${formatMoney(REFERENCE.lepIncomeLimitSingle, { decimals: false })} pour une part, ${formatMoney(REFERENCE.lepIncomeLimitCouple, { decimals: false })} pour un couple (plafonds 2026). Il figure sur votre avis d'imposition.</span></label>
+        </section>
+
+        <section class="card stack-v">
           <h2>Sauvegarde et données</h2>
-          <p class="muted small">Vos données sont enregistrées uniquement dans ce navigateur (${formatNumber(size / 1024, 1)} Ko, ${pluralize(state.transactions.length, 'opération')}). Exportez régulièrement une sauvegarde pour ne rien perdre et pour les transférer sur un autre appareil.</p>
+          <p class="muted small">Vos données (${pluralize(state.transactions.length, 'opération')}) sont enregistrées uniquement dans ce navigateur. Exportez régulièrement une sauvegarde pour ne rien perdre et pour les transférer sur un autre appareil.${s.lastBackup ? ` Dernière sauvegarde : ${formatDate(s.lastBackup)}.` : ' Aucune sauvegarde pour le moment.'}</p>
+          <div class="callout small" id="storage-status">${icon('info')}<div>Vérification du stockage…</div></div>
           <div class="row">
             <button type="button" class="btn btn-primary" id="set-backup">${icon('download', { size: 16 })} Exporter une sauvegarde</button>
             <button type="button" class="btn" id="set-restore">${icon('upload', { size: 16 })} Restaurer</button>
@@ -77,7 +97,41 @@ export default {
       updateSettings({ budgetAlert: v });
     });
     root.querySelector('#set-privacy').addEventListener('change', (e) => updateSettings({ privacy: e.target.checked }));
-    root.querySelector('#set-backup').addEventListener('click', () => offerFile(`budget-sauvegarde-${todayISO()}.json`, exportData(), 'application/json'));
+    root.querySelector('#set-stability').addEventListener('change', (e) => updateSettings({ incomeStability: e.target.value }));
+    root.querySelector('#set-lep').addEventListener('change', (e) => updateSettings({ lepEligible: e.target.value }));
+    root.querySelector('#set-backup').addEventListener('click', () => {
+      offerFile(`budget-sauvegarde-${todayISO()}.json`, exportData(), 'application/json');
+      updateSettings({ lastBackup: todayISO() });
+    });
+    // État du stockage (asynchrone) : support utilisé, protection contre l'effacement, espace occupé.
+    const status = root.querySelector('#storage-status div');
+    storageInfo().then((info) => {
+      if (!status.isConnected) return;
+      const where = info.kind === 'indexedDB' ? 'IndexedDB' : info.kind === 'localStorage' ? 'stockage local (limité à environ 5 Mo)' : 'inconnu';
+      const used = info.usage != null ? ` · ${info.usage < 1048576 ? `${formatNumber(Math.max(1, info.usage / 1024))} Ko` : `${formatNumber(info.usage / 1048576, 1)} Mo`} utilisés` : '';
+      const persisted =
+        info.persisted === true
+          ? 'Stockage persistant : le navigateur ne l’effacera pas pour libérer de la place.'
+          : 'Stockage non garanti : le navigateur peut l’effacer s’il manque de place.';
+      status.replaceChildren();
+      const p1 = document.createElement('p');
+      p1.textContent = `Enregistrement : ${where}${used}. ${persisted}`;
+      const p2 = document.createElement('p');
+      p2.textContent = "Sur iPhone et iPad, Safari efface les données d'un site non ouvert pendant 7 jours : ajoutez Pécule à l'écran d'accueil (Partager → Sur l'écran d'accueil) pour éviter cette suppression.";
+      p2.className = 'muted';
+      status.append(p1, p2);
+      if (info.persisted === false && navigator.storage?.persist) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm';
+        btn.textContent = 'Protéger mes données';
+        btn.addEventListener('click', async () => {
+          const ok = await requestPersistence();
+          toast(ok ? 'Stockage protégé contre l’effacement automatique' : 'Le navigateur a refusé : installez l’application ou ajoutez-la à vos favoris, puis réessayez.');
+        });
+        status.append(btn);
+      }
+    });
     root.querySelector('#set-restore').addEventListener('click', async () => {
       const file = await pickFile('.json,application/json');
       if (!file) return;

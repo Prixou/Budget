@@ -27,6 +27,118 @@ export const UNCATEGORIZED = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Données dérivées mémoïsées                                          */
+/* ------------------------------------------------------------------ */
+
+// Le cache est rattaché au tableau des opérations ; le store l'invalide
+// après chaque modification (voir invalidateDerived dans store.js).
+const derivedCache = new WeakMap();
+
+export function invalidateDerived(state) {
+  if (state?.transactions) derivedCache.delete(state.transactions);
+}
+
+function memo(state, key, compute) {
+  let entry = derivedCache.get(state.transactions);
+  if (!entry) {
+    entry = new Map();
+    derivedCache.set(state.transactions, entry);
+  }
+  if (!entry.has(key)) entry.set(key, compute());
+  return entry.get(key);
+}
+
+const compareByDate = (a, b) => (a.date === b.date ? (a.createdAt || 0) - (b.createdAt || 0) : a.date < b.date ? -1 : 1);
+
+/** Opérations triées par date croissante. */
+export function transactionsByDate(state) {
+  return memo(state, 'byDate', () => [...state.transactions].sort(compareByDate));
+}
+
+/** Index mensuel : « YYYY-MM » → opérations du mois (ordre chronologique, mois croissants). */
+function monthIndex(state) {
+  return memo(state, 'months', () => {
+    const index = new Map();
+    for (const tx of transactionsByDate(state)) {
+      const key = tx.date.slice(0, 7);
+      let list = index.get(key);
+      if (!list) index.set(key, (list = []));
+      list.push(tx);
+    }
+    return index;
+  });
+}
+
+/** Opérations d'un intervalle de dates, sans parcourir tout l'historique. */
+function candidates(state, from, to) {
+  if (!from && !to) return transactionsByDate(state);
+  const fromMonth = from ? from.slice(0, 7) : null;
+  const toMonth = to ? to.slice(0, 7) : null;
+  const out = [];
+  for (const [month, list] of monthIndex(state)) {
+    if (fromMonth && month < fromMonth) continue;
+    if (toMonth && month > toMonth) break;
+    const edge = month === fromMonth || month === toMonth;
+    for (const tx of list) if (!edge || inRange(tx, from, to)) out.push(tx);
+  }
+  return out;
+}
+
+/**
+ * Texte normalisé utilisé par la recherche (libellé, notes, étiquettes, catégorie, compte, montant).
+ * Calculé à la demande et gardé en cache : une recherche dans un mois ne traite que ce mois.
+ */
+function searchText(state) {
+  const cache = memo(state, 'search', () => new Map());
+  const names = memo(state, 'names', () => ({
+    cat: new Map(state.categories.map((c) => [c.id, c.name])),
+    acc: new Map(state.accounts.map((a) => [a.id, a.name])),
+  }));
+  return (tx) => {
+    let text = cache.get(tx);
+    if (text === undefined) {
+      text = normalizeText(
+        [tx.description, tx.notes, (tx.tags || []).join(' '), names.cat.get(tx.categoryId), names.acc.get(tx.accountId), (tx.amount / 100).toFixed(2)].join(' '),
+      );
+      cache.set(tx, text);
+    }
+    return text;
+  };
+}
+
+/**
+ * Prépare l'index de recherche par petits morceaux, tant qu'il reste du temps libre
+ * (deadline de requestIdleCallback). Retourne true quand tout est prêt.
+ */
+export function warmSearchIndex(state, deadline = null, from = 0) {
+  const text = searchText(state);
+  const list = state.transactions;
+  let i = from;
+  while (i < list.length) {
+    text(list[i++]);
+    if (deadline && i % 200 === 0 && deadline.timeRemaining() < 2) return i;
+  }
+  return true;
+}
+
+/** Date de la première opération (null s'il n'y en a pas). */
+export function firstTransactionDate(state) {
+  return memo(state, 'first', () => transactionsByDate(state)[0]?.date ?? null);
+}
+
+/** Dernière catégorie et dernier compte utilisés pour chaque libellé. */
+export function descriptionMemory(state) {
+  return memo(state, 'descriptions', () => {
+    const memory = new Map();
+    for (const t of transactionsByDate(state)) {
+      if (!t.description) continue;
+      memory.set(normalizeText(t.description), { description: t.description, type: t.type, categoryId: t.categoryId, accountId: t.accountId, toAccountId: t.toAccountId });
+    }
+    return memory;
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Comptes et soldes                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -44,9 +156,13 @@ export function txEffect(tx, accountId) {
 
 /** Soldes de tous les comptes à une date donnée (incluse), en un seul passage. */
 export function accountBalances(state, upto = null, { clearedOnly = false } = {}) {
+  return memo(state, `balances|${upto}|${clearedOnly}`, () => computeBalances(state, upto, clearedOnly));
+}
+
+function computeBalances(state, upto, clearedOnly) {
   const balances = new Map(state.accounts.map((a) => [a.id, a.initialBalance || 0]));
-  for (const tx of state.transactions) {
-    if (upto && tx.date > upto) continue;
+  for (const tx of transactionsByDate(state)) {
+    if (upto && tx.date > upto) break;
     if (clearedOnly && !tx.cleared) continue;
     if (tx.type === 'transfer') {
       if (balances.has(tx.accountId)) balances.set(tx.accountId, balances.get(tx.accountId) - tx.amount);
@@ -92,9 +208,7 @@ export function balanceSeries(state, dates, accountId = null) {
   const ids = accountId ? [accountId] : countedAccounts(state).map((a) => a.id);
   const idSet = new Set(ids);
   let balance = sum(state.accounts.filter((a) => idSet.has(a.id)), (a) => a.initialBalance || 0);
-  const txs = state.transactions
-    .filter((t) => idSet.has(t.accountId) || idSet.has(t.toAccountId))
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const txs = transactionsByDate(state).filter((t) => idSet.has(t.accountId) || idSet.has(t.toAccountId));
   const out = [];
   let i = 0;
   for (const date of dates) {
@@ -126,11 +240,12 @@ export function inRange(tx, from, to) {
  * filters : { from, to, type, accountId, categoryId, search, cleared, tag, min, max }
  */
 export function filterTransactions(state, filters = {}) {
-  const q = normalizeText(filters.search);
-  const catById = new Map(state.categories.map((c) => [c.id, c]));
-  const accById = new Map(state.accounts.map((a) => [a.id, a]));
-  return state.transactions.filter((tx) => {
-    if (!inRange(tx, filters.from, filters.to)) return false;
+  const words = normalizeText(filters.search).split(/\s+/).filter(Boolean);
+  const texts = words.length ? searchText(state) : null;
+  const simple = !filters.type && !filters.accountId && (filters.categoryId === undefined || filters.categoryId === '') && !filters.cleared && !filters.tag && filters.min == null && filters.max == null && !words.length;
+  const base = candidates(state, filters.from, filters.to);
+  if (simple) return base === state.transactions ? [...base] : base.slice();
+  return base.filter((tx) => {
     if (filters.type && tx.type !== filters.type) return false;
     if (filters.accountId && tx.accountId !== filters.accountId && tx.toAccountId !== filters.accountId) return false;
     if (filters.categoryId !== undefined && filters.categoryId !== '') {
@@ -142,30 +257,30 @@ export function filterTransactions(state, filters = {}) {
     if (filters.tag && !(tx.tags || []).includes(filters.tag)) return false;
     if (filters.min != null && tx.amount < filters.min) return false;
     if (filters.max != null && tx.amount > filters.max) return false;
-    if (q) {
-      const cat = catById.get(tx.categoryId);
-      const acc = accById.get(tx.accountId);
-      const hay = normalizeText(
-        [tx.description, tx.notes, (tx.tags || []).join(' '), cat?.name, acc?.name, (tx.amount / 100).toFixed(2)].join(' '),
-      );
-      if (!q.split(/\s+/).every((word) => hay.includes(word))) return false;
+    if (words.length) {
+      const hay = texts(tx);
+      if (!words.every((word) => hay.includes(word))) return false;
     }
     return true;
   });
 }
 
+function isSortedByDate(txs) {
+  for (let i = 1; i < txs.length; i++) if (compareByDate(txs[i - 1], txs[i]) > 0) return false;
+  return true;
+}
+
 export function sortTransactions(txs, sort = 'date-desc') {
-  const list = [...txs];
-  const byDate = (a, b) => (a.date === b.date ? (a.createdAt || 0) - (b.createdAt || 0) : a.date < b.date ? -1 : 1);
   switch (sort) {
-    case 'date-asc':
-      return list.sort(byDate);
     case 'amount-desc':
-      return list.sort((a, b) => b.amount - a.amount);
+      return [...txs].sort((a, b) => b.amount - a.amount);
     case 'amount-asc':
-      return list.sort((a, b) => a.amount - b.amount);
-    default:
-      return list.sort((a, b) => -byDate(a, b));
+      return [...txs].sort((a, b) => a.amount - b.amount);
+    default: {
+      // Les listes filtrées sont déjà chronologiques : on évite un tri complet.
+      const asc = isSortedByDate(txs) ? [...txs] : [...txs].sort(compareByDate);
+      return sort === 'date-asc' ? asc : asc.reverse();
+    }
   }
 }
 
@@ -226,18 +341,18 @@ export function byTag(txs, type = 'expense') {
 
 /** Totaux mensuels pour une liste de mois « YYYY-MM ». */
 export function monthlyTotals(state, months, { accountId = null } = {}) {
-  const index = new Map(months.map((m, i) => [m, i]));
-  const rows = months.map((month) => ({ month, income: 0, expense: 0, net: 0 }));
-  for (const tx of state.transactions) {
-    if (tx.type === 'transfer') continue;
-    if (accountId && tx.accountId !== accountId) continue;
-    const i = index.get(monthKey(tx.date));
-    if (i === undefined) continue;
-    if (tx.type === 'income') rows[i].income += tx.amount;
-    else rows[i].expense += tx.amount;
-  }
-  for (const r of rows) r.net = r.income - r.expense;
-  return rows;
+  const index = monthIndex(state);
+  return months.map((month) => {
+    const row = { month, income: 0, expense: 0, net: 0 };
+    for (const tx of index.get(month) || []) {
+      if (tx.type === 'transfer') continue;
+      if (accountId && tx.accountId !== accountId) continue;
+      if (tx.type === 'income') row.income += tx.amount;
+      else row.expense += tx.amount;
+    }
+    row.net = row.income - row.expense;
+    return row;
+  });
 }
 
 /** Période précédente de même durée (alignée sur les mois si possible). */
@@ -317,6 +432,10 @@ export function effectiveBudget(state, categoryId, month) {
 
 /** Dépenses indexées par « mois|catégorie ». */
 export function spendIndex(state) {
+  return memo(state, 'spend', () => computeSpendIndex(state));
+}
+
+function computeSpendIndex(state) {
   const index = new Map();
   for (const tx of state.transactions) {
     if (tx.type !== 'expense') continue;

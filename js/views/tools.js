@@ -13,14 +13,17 @@ import {
 } from '../calc.js';
 import { chartSlot, legend, meter, mountCharts, stackedBar } from '../charts.js';
 import { kpi } from '../components.js';
+import { DEBT_KINDS, REFERENCE } from '../defaults.js';
 import { currencySymbol } from '../forms.js';
+import { earlyRepayment, marketMortgageRate } from '../insights.js';
 import { store } from '../store.js';
 import { formValues, icon, options } from '../ui.js';
 import { amortizationTable } from './debts.js';
-import { centsToInput, formatMoney, formatNumber, formatPercent, html, monthEnd, monthKey, monthRange, monthStart, parseAmount, shiftMonth, sum, todayISO } from '../utils.js';
+import { addDays, centsToInput, formatDate, formatMoney, formatNumber, formatPercent, html, monthEnd, monthKey, monthRange, monthStart, parseAmount, shiftMonth, sum, todayISO } from '../utils.js';
 
 const TOOLS = {
   loan: { label: 'Prêt', icon: 'debt' },
+  prepay: { label: 'Remboursement anticipé', icon: 'debt' },
   capacity: { label: "Capacité d'emprunt", icon: 'bank' },
   savings: { label: 'Épargne & intérêts', icon: 'chart' },
   goal: { label: 'Objectif', icon: 'target' },
@@ -29,6 +32,21 @@ const TOOLS = {
 };
 
 const ui = { tool: 'loan', values: {} };
+
+/** Ouvre un simulateur précis, éventuellement prérempli (depuis un conseil). */
+export function openTool(tool, { debtId = null, amount = null } = {}) {
+  ui.tool = tool;
+  if (tool === 'prepay') ui.values.prepay = { ...(ui.values.prepay || {}), ...(debtId ? { debt: debtId } : {}), ...(amount ? { amount: centsToInput(amount) } : {}) };
+  if (location.hash === '#simulateurs') window.dispatchEvent(new HashChangeEvent('hashchange'));
+  else location.hash = '#simulateurs';
+}
+
+const RATE_PRESETS = [
+  ['Livret A / LDDS', REFERENCE.livretARate],
+  ['LEP', REFERENCE.lepRate],
+  ['Fonds en euros (moy. 2025)', REFERENCE.fondsEurosRate],
+  ['PEL 2026 (brut)', 2],
+];
 
 const num = (v) => {
   const n = parseFloat(String(v ?? '').replace(/\s/g, '').replace(',', '.'));
@@ -60,34 +78,61 @@ function context(state) {
   const txs = filterTransactions(state, { from: monthStart(months[0]), to: monthEnd(last) });
   const split = groupSplit(state, txs);
   const n = active.length || 1;
-  return { avgIncome, avgExpense, debtsMonthly, savings, split: { needs: split.needs / n, wants: split.wants / n, savings: split.savings / n, income: split.income / n } };
+  const emergencyMonths = state.settings?.incomeStability === 'variable' ? REFERENCE.emergencyMonthsVariable : REFERENCE.emergencyMonthsStable;
+  return { state, avgIncome, avgExpense, debtsMonthly, savings, emergencyMonths, split: { needs: split.needs / n, wants: split.wants / n, savings: split.savings / n, income: split.income / n } };
 }
 
 function defaults(tool, ctx) {
   switch (tool) {
     case 'loan':
-      return { principal: '200000', rate: '3,4', years: '20', insurance: '0,30' };
+      return { principal: '200000', rate: formatNumber(marketMortgageRate(20), 2), years: '20', insurance: '0,30' };
+    case 'prepay': {
+      const active = ctx.state.debts.find((d) => loanStatus(d, todayISO()).remaining > 0);
+      return { debt: active ? active.id : 'manual', amount: '5000', mode: 'duration', remaining: '100000', rate: '4', monthsLeft: '120', kind: 'immobilier', insurance: '0' };
+    }
     case 'capacity':
-      return { income: centsToInput(ctx.avgIncome) || '3000', charges: centsToInput(ctx.debtsMonthly) || '0', ratio: '35', rate: '3,4', years: '25', insurance: '0,30', downPayment: '20000' };
+      return { income: centsToInput(ctx.avgIncome) || '3000', charges: centsToInput(ctx.debtsMonthly) || '0', ratio: '35', rate: formatNumber(marketMortgageRate(25), 2), years: '25', insurance: '0,30', downPayment: '20000' };
     case 'savings':
-      return { initial: '1000', monthly: '200', rate: '3', years: '15', inflation: '2' };
+      return { initial: '1000', monthly: '200', rate: formatNumber(REFERENCE.livretARate, 2), years: '15', inflation: formatNumber(REFERENCE.inflation, 2) };
     case 'goal':
       return { target: '10000', current: centsToInput(ctx.savings) || '0', months: '24', rate: '2' };
     case 'rule':
       return { income: centsToInput(ctx.avgIncome) || '2500' };
     case 'emergency':
-      return { expense: centsToInput(ctx.avgExpense) || '1800', months: '6', current: centsToInput(ctx.savings) || '0' };
+      return { expense: centsToInput(ctx.avgExpense) || '1800', months: String(ctx.emergencyMonths), current: centsToInput(ctx.savings) || '0' };
     default:
       return {};
   }
 }
 
-function forms(tool, v) {
+function forms(tool, v, ctx) {
   const cur = currencySymbol();
   switch (tool) {
+    case 'prepay': {
+      const debts = ctx.state.debts.filter((d) => loanStatus(d, todayISO()).remaining > 0);
+      return html`<label class="field"><span>Crédit</span><select class="select" name="debt" id="t-debt">${options(
+          [...debts.map((d) => ({ value: d.id, label: `${d.name} (${formatNumber(d.rate, 2)} %)` })), { value: 'manual', label: 'Saisie manuelle' }],
+          v.debt,
+        )}</select></label>
+        <div class="stack-v" data-manual ${v.debt === 'manual' ? '' : 'hidden'}>
+          ${field('remaining', 'Capital restant dû', v.remaining, { suffix: cur })}
+          ${field('rate', 'Taux nominal annuel', v.rate, { suffix: '%' })}
+          ${field('monthsLeft', 'Mensualités restantes', v.monthsLeft, { suffix: 'mois' })}
+          <label class="field"><span>Type de crédit</span><select class="select" name="kind" id="t-kind">${options(Object.entries(DEBT_KINDS).map(([value, label]) => ({ value, label })), v.kind)}</select></label>
+          ${field('insurance', 'Assurance mensuelle', v.insurance, { suffix: cur })}
+        </div>
+        ${field('amount', 'Somme remboursée par anticipation', v.amount, { suffix: cur })}
+        <label class="field"><span>Ensuite</span><select class="select" name="mode" id="t-mode">${options(
+          [
+            { value: 'duration', label: 'Garder la mensualité, raccourcir la durée' },
+            { value: 'payment', label: 'Garder la durée, baisser la mensualité' },
+          ],
+          v.mode,
+        )}</select></label>`;
+    }
     case 'loan':
       return html`${field('principal', 'Montant emprunté', v.principal, { suffix: cur })}
-        ${field('rate', 'Taux nominal annuel', v.rate, { suffix: '%' })}
+        ${field('rate', 'Taux nominal annuel', v.rate, { suffix: '%', hint: `Taux moyens 2026 : ${formatNumber(REFERENCE.mortgageMarket15y, 1)} % sur 15 ans à ${formatNumber(REFERENCE.mortgageMarket25y, 1)} % sur 25 ans.` })}
         ${field('years', 'Durée', v.years, { suffix: 'ans' })}
         ${field('insurance', 'Assurance emprunteur', v.insurance, { suffix: '%', hint: 'Taux annuel appliqué au capital emprunté (souvent 0,10 à 0,40 %).' })}`;
     case 'capacity':
@@ -95,15 +140,16 @@ function forms(tool, v) {
         ${field('charges', 'Mensualités de crédits en cours', v.charges, { suffix: cur })}
         ${field('ratio', "Taux d'endettement maximal", v.ratio, { suffix: '%', hint: 'Les banques françaises appliquent 35 % assurance comprise (recommandation HCSF).' })}
         ${field('rate', 'Taux du crédit', v.rate, { suffix: '%' })}
-        ${field('years', 'Durée', v.years, { suffix: 'ans', hint: '25 ans maximum en règle générale.' })}
+        ${field('years', 'Durée', v.years, { suffix: 'ans', hint: '25 ans maximum (27 ans dans le neuf), selon les normes du HCSF.' })}
         ${field('insurance', 'Assurance emprunteur', v.insurance, { suffix: '%' })}
         ${field('downPayment', 'Apport personnel', v.downPayment, { suffix: cur })}`;
     case 'savings':
       return html`${field('initial', 'Capital de départ', v.initial, { suffix: cur })}
         ${field('monthly', 'Versement mensuel', v.monthly, { suffix: cur })}
-        ${field('rate', 'Rendement annuel', v.rate, { suffix: '%', hint: 'Net de frais et de fiscalité si possible.' })}
+        ${field('rate', 'Rendement annuel', v.rate, { suffix: '%', hint: `Taux au ${formatDate(REFERENCE.ratesDate)}. Les livrets réglementés sont nets d'impôt ; fonds en euros et PEL avant prélèvements.` })}
+        <div class="chips" role="group" aria-label="Taux de référence">${RATE_PRESETS.map(([label, rate]) => html`<button type="button" class="chip" data-preset-rate="${formatNumber(rate, 2)}">${label} · ${formatNumber(rate, 2)} %</button>`)}</div>
         ${field('years', 'Durée', v.years, { suffix: 'ans' })}
-        ${field('inflation', 'Inflation annuelle', v.inflation, { suffix: '%' })}`;
+        ${field('inflation', 'Inflation annuelle', v.inflation, { suffix: '%', hint: `Prévision 2026 de la Banque de France : ${formatNumber(REFERENCE.inflation, 1)} %.` })}`;
     case 'goal':
       return html`${field('target', 'Montant à atteindre', v.target, { suffix: cur })}
         ${field('current', 'Déjà épargné', v.current, { suffix: cur })}
@@ -125,6 +171,40 @@ function forms(tool, v) {
 
 function results(tool, v, ctx) {
   switch (tool) {
+    case 'prepay': {
+      const today = todayISO();
+      let debt = ctx.state.debts.find((d) => d.id === v.debt);
+      if (!debt) {
+        const months = Math.round(num(v.monthsLeft));
+        if (!money(v.remaining) || months <= 0) return hintBox();
+        debt = { id: 'manuel', name: 'Crédit', kind: v.kind, principal: money(v.remaining), rate: num(v.rate), termMonths: months, startDate: addDays(today, 1), insurance: money(v.insurance) };
+      }
+      const amount = money(v.amount);
+      if (!amount) return hintBox();
+      const r = earlyRepayment(debt, { amount, mode: v.mode, today });
+      const immo = debt.kind === 'immobilier';
+      return html`<div class="stack-v">
+        <div><span class="hero-label">Gain net du remboursement</span><div class="result-big money ${r.gain < 0 ? 'neg' : ''}">${formatMoney(r.gain, { decimals: false })}</div></div>
+        <div class="kpis">
+          ${kpi('Intérêts économisés', formatMoney(r.interestSaved, { decimals: false }))}
+          ${kpi('Assurance économisée', formatMoney(r.insuranceSaved, { decimals: false }))}
+          ${kpi('Indemnités (IRA)', formatMoney(r.penalty, { decimals: false }), html`<span class="kpi-delta">plafond légal</span>`)}
+          ${v.mode === 'payment'
+            ? kpi('Nouvelle mensualité', formatMoney(r.newPayment), html`<span class="kpi-delta">au lieu de ${formatMoney(r.payment)}</span>`)
+            : kpi('Fin du crédit', r.newMonths ? formatDate(r.newEndDate) : 'Soldé', html`<span class="kpi-delta">${r.monthsLeft - r.newMonths} mensualité(s) en moins</span>`)}
+        </div>
+        <div class="callout ${r.worthIt ? 'callout-good' : 'callout-warning'}">${icon(r.worthIt ? 'check' : 'info')}<div>${
+          r.worthIt
+            ? html`<strong>Rembourser est plus intéressant</strong> que de garder ${formatMoney(r.amount, { decimals: false })} sur un Livret A (environ ${formatMoney(r.placementGain, { decimals: false })} d'intérêts sur la même durée). Gardez toutefois votre épargne de précaution intacte.`
+            : html`<strong>Mieux vaut épargner</strong> : sur un Livret A à ${formatNumber(REFERENCE.livretARate, 2)} %, cette somme rapporterait environ ${formatMoney(r.placementGain, { decimals: false })}, plus que le gain du remboursement.`
+        }</div></div>
+        <p class="muted small">${
+          immo
+            ? "Crédit immobilier : indemnités plafonnées à 6 mois d'intérêts sur la somme remboursée et à 3 % du capital restant dû (art. L313-47 du Code de la consommation). Elles ne sont pas dues si le logement est vendu à la suite d'un changement de lieu de travail ou d'une cessation forcée d'activité, ni en cas de décès."
+            : "Crédit à la consommation : aucune indemnité jusqu'à 10 000 € remboursés sur 12 mois ; au-delà, 1 % de la somme (0,5 % s'il reste moins d'un an), sans dépasser les intérêts restants (art. L312-34)."
+        } Réduire la durée économise plus d'intérêts que réduire la mensualité.</p>
+      </div>`;
+    }
     case 'loan': {
       const principal = money(v.principal);
       const months = Math.round(num(v.years) * 12);
@@ -281,7 +361,7 @@ export default {
       <div class="grid grid-tool">
         <section class="card">
           <div class="card-header"><h2>${TOOLS[ui.tool].label}</h2><button type="button" class="link-btn" data-reset-tool>Réinitialiser</button></div>
-          <form class="form" id="tool-form" novalidate>${forms(ui.tool, v)}</form>
+          <form class="form" id="tool-form" novalidate>${forms(ui.tool, v, ctx)}</form>
         </section>
         <section class="card" id="tool-results" aria-live="polite">${results(ui.tool, v, ctx)}</section>
       </div>`;
@@ -305,8 +385,15 @@ export default {
       const ctx = context(store.state);
       out.innerHTML = String(results(ui.tool, { ...defaults(ui.tool, ctx), ...ui.values[ui.tool] }, ctx));
       mountCharts(out);
+      form.querySelector('[data-manual]')?.toggleAttribute('hidden', ui.values[ui.tool].debt !== 'manual');
     };
     form?.addEventListener('input', update);
     form?.addEventListener('change', update);
+    root.querySelectorAll('[data-preset-rate]').forEach((b) =>
+      b.addEventListener('click', () => {
+        form.elements.rate.value = b.dataset.presetRate;
+        update();
+      }),
+    );
   },
 };

@@ -1,5 +1,5 @@
 // Formulaire d'opération (dépense, revenu, virement), partagé par toutes les vues.
-import { FREQUENCIES } from './calc.js';
+import { FREQUENCIES, descriptionMemory } from './calc.js';
 import { deleteTransactions, processRecurring, saveRecurring, saveTransaction, store } from './store.js';
 import { accountOptions, categoryOptions, confirmDialog, fieldError, formValues, icon, openModal, options, toast } from './ui.js';
 import { centsToInput, getMoneyConfig, html, isValidISODate, normalizeText, parseAmount, raw, todayISO } from './utils.js';
@@ -23,17 +23,6 @@ export function amountField({ name = 'amount', label = 'Montant', value = null, 
     </div>
     ${hint ? html`<span class="hint">${hint}</span>` : ''}
   </label>`;
-}
-
-/** Mémoire des libellés : dernière catégorie et compte utilisés pour chaque libellé. */
-function descriptionMemory(state) {
-  const memory = new Map();
-  const sorted = [...state.transactions].sort((a, b) => (a.date < b.date ? -1 : 1));
-  for (const t of sorted) {
-    if (!t.description) continue;
-    memory.set(normalizeText(t.description), { description: t.description, type: t.type, categoryId: t.categoryId, accountId: t.accountId, toAccountId: t.toAccountId });
-  }
-  return memory;
 }
 
 /**
@@ -64,7 +53,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
     ...(tx || {}),
   };
   const memory = descriptionMemory(state);
-  const suggestions = [...memory.values()].map((m) => m.description).slice(-300);
+  const suggestions = [...memory.values()].slice(-300).map((m) => m.description);
 
   const body = html`<form class="form" id="tx-form" novalidate>
     <div class="segmented" role="radiogroup" aria-label="Type d'opération">

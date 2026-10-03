@@ -1,5 +1,5 @@
 // Liste des opérations : recherche, filtres, actions groupées, import / export.
-import { filterTransactions, sortTransactions, summarize } from '../calc.js';
+import { filterTransactions, sortTransactions, summarize, warmSearchIndex } from '../calc.js';
 import { groupedTxList, lookups, monthNav } from '../components.js';
 import { toCSV } from '../csv.js';
 import { deleteTransactions, recategorize, setCleared, store } from '../store.js';
@@ -211,6 +211,16 @@ export default {
 
   mount(root, ctx) {
     const { rerender, session } = ctx;
+    // Index de recherche préparé par petits morceaux pendant les temps morts :
+    // la première frappe est instantanée sans jamais bloquer une saisie.
+    if (typeof requestIdleCallback === 'function') {
+      const step = (deadline, from = 0) => {
+        if (!root.isConnected) return;
+        const next = warmSearchIndex(ctx.state, deadline, from);
+        if (next !== true) requestIdleCallback((d) => step(d, next));
+      };
+      requestIdleCallback((d) => step(d));
+    }
     const search = root.querySelector('#tx-search');
     let timer;
     search?.addEventListener('input', () => {

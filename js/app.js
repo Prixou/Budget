@@ -4,30 +4,31 @@ import { installTooltipHandlers, mountCharts, resetCharts } from './charts.js';
 import { openTransactionForm } from './forms.js';
 import { openImportDialog } from './importer.js';
 import { openStartFresh } from './onboarding.js';
-import { loadDemo, processRecurring, store, updateSettings } from './store.js';
-import { icon, openModal } from './ui.js';
-import { currentMonth, html, raw, setMoneyConfig, shiftMonth, todayISO } from './utils.js';
+import { exportData, loadDemo, processRecurring, requestPersistence, store, updateSettings } from './store.js';
+import { icon, offerFile, openModal, toast } from './ui.js';
+import { currentMonth, daysBetween, html, raw, setMoneyConfig, shiftMonth, todayISO } from './utils.js';
 import accounts from './views/accounts.js';
 import budgets from './views/budgets.js';
 import categories from './views/categories.js';
 import dashboard from './views/dashboard.js';
 import debts from './views/debts.js';
 import goals from './views/goals.js';
+import optimisation from './views/optimisation.js';
 import recurring from './views/recurring.js';
 import reports from './views/reports.js';
 import settings from './views/settings.js';
 import tools from './views/tools.js';
 import transactions from './views/transactions.js';
 
-const VIEWS = [dashboard, transactions, budgets, accounts, recurring, goals, debts, reports, tools, categories, settings];
+const VIEWS = [dashboard, transactions, budgets, accounts, recurring, goals, debts, optimisation, reports, tools, categories, settings];
 const BY_ID = new Map(VIEWS.map((v) => [v.id, v]));
 const NAV = [
   ['Suivi', ['tableau-de-bord', 'transactions', 'budgets', 'comptes']],
   ['Planifier', ['recurrentes', 'objectifs', 'dettes']],
-  ['Analyser', ['rapports', 'simulateurs']],
+  ['Analyser', ['optimisation', 'rapports', 'simulateurs']],
   ['Réglages', ['categories', 'parametres']],
 ];
-const TABS = ['tableau-de-bord', 'transactions', 'budgets', 'rapports'];
+const TABS = ['tableau-de-bord', 'transactions', 'budgets', 'optimisation'];
 const MONTH_VIEWS = new Set(['tableau-de-bord', 'budgets', 'transactions']);
 
 const session = { month: currentMonth() };
@@ -101,11 +102,35 @@ function renderBanners() {
     ${!storageOk
       ? html`<div class="banner banner-warning">${icon('alert')}<p>Ce navigateur ne permet pas d'enregistrer vos données (navigation privée ?). Elles seront perdues à la fermeture : exportez une sauvegarde depuis les paramètres.</p></div>`
       : ''}
+    ${store.saveFailed && storageOk
+      ? html`<div class="banner banner-warning">${icon('alert')}<p>Le dernier enregistrement a échoué (espace de stockage plein ?). Exportez une sauvegarde depuis les paramètres pour ne rien perdre.</p></div>`
+      : ''}
     ${s.demo
       ? html`<div class="banner" role="status">${icon('sparkle')}<p><strong>Données d'exemple.</strong> Explorez librement l'application : tout ce que vous voyez est fictif.</p><button type="button" class="btn btn-primary btn-sm" id="banner-start">Commencer avec mes données</button></div>`
-      : ''}`);
+      : backupDue(s)
+        ? html`<div class="banner" role="status">${icon('download')}<p><strong>${s.lastBackup ? `Dernière sauvegarde il y a ${daysBetween(s.lastBackup, todayISO())} jours.` : 'Aucune sauvegarde de vos données.'}</strong> Elles ne sont enregistrées que dans ce navigateur : une sauvegarde régulière évite de tout perdre.</p><button type="button" class="btn btn-primary btn-sm" id="banner-backup">Sauvegarder</button><button type="button" class="btn btn-ghost btn-sm" id="banner-later">Plus tard</button></div>`
+        : ''}`);
   el.hidden = !el.innerHTML.trim();
   el.querySelector('#banner-start')?.addEventListener('click', () => openStartFresh());
+  el.querySelector('#banner-backup')?.addEventListener('click', () => {
+    offerFile(`budget-sauvegarde-${todayISO()}.json`, exportData(), 'application/json');
+    updateSettings({ lastBackup: todayISO() });
+  });
+  el.querySelector('#banner-later')?.addEventListener('click', () => updateSettings({ backupSnoozedUntil: shiftDate(todayISO(), 7) }));
+}
+
+/** Rappel de sauvegarde : tous les 30 jours dès qu'il y a de vraies données. */
+function backupDue(s) {
+  const today = todayISO();
+  if (store.state.transactions.length < 20) return false;
+  if (s.backupSnoozedUntil && s.backupSnoozedUntil > today) return false;
+  return !s.lastBackup || daysBetween(s.lastBackup, today) >= 30;
+}
+
+function shiftDate(iso, days) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 function renderView({ resetScroll = false } = {}) {
@@ -262,9 +287,14 @@ function installGlobalHandlers() {
 
   window.addEventListener('hashchange', navigate);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
+    // En arrière-plan, on enregistre tout de suite : un onglet mobile peut être fermé sans prévenir.
+    if (document.visibilityState === 'hidden') {
+      store.flush();
+      return;
+    }
     if (processRecurring() === 0) renderView();
   });
+  window.addEventListener('pagehide', () => store.flush());
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
     applySettings();
     renderShell();
@@ -287,12 +317,14 @@ function checkStorage() {
 /* ------------------------------------------------------------------ */
 
 async function boot() {
-  storageOk = checkStorage();
   await store.init();
+  storageOk = store.storageKind === 'indexedDB' || checkStorage();
   // Première visite : on montre un exemple réaliste, clairement signalé.
   if (!store.state.settings.onboarded) loadDemo();
   applySettings();
   processRecurring();
+  // Données réelles : on demande au navigateur de ne pas les effacer en cas de manque de place.
+  if (!store.state.settings.demo) requestPersistence();
 
   store.subscribe((state, change) => {
     applySettings();
@@ -305,9 +337,41 @@ async function boot() {
   navigate();
   document.getElementById('app').removeAttribute('aria-busy');
 
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http') && window.self === window.top) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
+  registerServiceWorker();
+}
+
+/** Hors ligne et mises à jour : la nouvelle version est proposée, jamais imposée en pleine saisie. */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http') || window.self !== window.top) return;
+  // En développement local, on veut toujours les fichiers les plus récents.
+  if (['localhost', '127.0.0.1'].includes(location.hostname)) return;
+  const hadController = !!navigator.serviceWorker.controller;
+  const offer = (worker) =>
+    toast('Une nouvelle version de Pécule est disponible.', {
+      action: { label: 'Mettre à jour', fn: () => worker.postMessage('SKIP_WAITING') },
+      duration: 60000,
+    });
+  navigator.serviceWorker
+    .register('sw.js')
+    .then((reg) => {
+      if (reg.waiting && hadController) offer(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const worker = reg.installing;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) offer(worker);
+        });
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    })
+    .catch(() => {});
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    store.flush().finally(() => location.reload());
+  });
 }
 
 boot();

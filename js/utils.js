@@ -272,9 +272,11 @@ export function formatDate(iso, style = 'medium') {
   const month = d.getMonth();
   const year = d.getFullYear();
   if (style === 'short') return `${pad(day)}/${pad(month + 1)}/${year}`;
-  if (style === 'day') return `${day} ${MONTHS_SHORT[month]}`;
-  if (style === 'long') return `${capitalize(WEEKDAYS[d.getDay()])} ${day} ${MONTHS[month]} ${year}`;
-  return `${day} ${MONTHS_SHORT[month]} ${year}`;
+  // En français, le premier jour du mois s'écrit « 1er ».
+  const dayText = day === 1 ? '1er' : String(day);
+  if (style === 'day') return `${dayText} ${MONTHS_SHORT[month]}`;
+  if (style === 'long') return `${capitalize(WEEKDAYS[d.getDay()])} ${dayText} ${MONTHS[month]} ${year}`;
+  return `${dayText} ${MONTHS_SHORT[month]} ${year}`;
 }
 
 /** « Aujourd'hui », « Hier », « Demain » ou la date longue. */

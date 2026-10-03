@@ -1,7 +1,7 @@
 // Démarrage : quitter les données d'exemple et créer son premier compte.
 import { CURRENCIES } from './defaults.js';
 import { amountField } from './forms.js';
-import { startFresh, store } from './store.js';
+import { requestPersistence, startFresh, store } from './store.js';
 import { fieldError, formValues, icon, openModal, options, toast } from './ui.js';
 import { html, parseAmount } from './utils.js';
 
@@ -29,6 +29,7 @@ export function openStartFresh() {
         const balance = f.initialBalance.trim() ? parseAmount(f.initialBalance) : 0;
         if (balance == null) return fieldError(e.target, 'initialBalance', 'Montant invalide.');
         startFresh({ accountName: f.accountName.trim() || 'Compte courant', initialBalance: balance, currency: f.currency });
+        requestPersistence();
         close();
         location.hash = '#tableau-de-bord';
         toast('C’est parti ! Ajoutez votre première opération avec le bouton +', {

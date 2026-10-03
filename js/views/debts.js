@@ -3,10 +3,56 @@ import { loanPayment, loanStatus, monthlyTotals } from '../calc.js';
 import { meter } from '../charts.js';
 import { kpi } from '../components.js';
 import { DEBT_KINDS } from '../defaults.js';
-import { amountField } from '../forms.js';
+import { amountField, currencySymbol } from '../forms.js';
+import { payoffPlan } from '../insights.js';
 import { deleteDebt, saveDebt, store } from '../store.js';
 import { confirmDialog, emptyState, fieldError, formValues, icon, openModal, options, toast } from '../ui.js';
 import { formatDate, formatMoney, formatNumber, formatPercent, groupBy, html, isValidISODate, monthKey, monthRange, parseAmount, shiftMonth, sum, todayISO } from '../utils.js';
+
+const ui = { extra: 10000 };
+
+/** Comparaison des stratégies de remboursement avec un effort mensuel supplémentaire. */
+function strategyCard(active, today) {
+  const extra = ui.extra;
+  const base = payoffPlan(active, { extra: 0, today, rollover: false });
+  const avalanche = payoffPlan(active, { extra, strategy: 'avalanche', today });
+  const snowball = payoffPlan(active, { extra, strategy: 'snowball', today });
+  const several = active.length > 1;
+  const rows = several
+    ? [
+        ['Sans effort supplémentaire', base, null],
+        ['Avalanche : taux le plus élevé d’abord', avalanche, avalanche.order],
+        ['Boule de neige : plus petite dette d’abord', snowball, snowball.order],
+      ]
+    : [
+        ['Sans effort supplémentaire', base, null],
+        [`Avec ${formatMoney(extra, { decimals: false })} de plus par mois`, avalanche, null],
+      ];
+  return html`<section class="card">
+    <div class="card-header">
+      <div><h2>Stratégie de remboursement</h2><p class="sub">Combien de temps et d'intérêts gagnés en remboursant un peu plus chaque mois</p></div>
+      <label class="field" style="min-width:180px"><span>Effort supplémentaire / mois</span>
+        <div class="input-with-suffix"><input class="input" id="strategy-extra" inputmode="decimal" value="${String(extra / 100).replace('.', ',')}"><span class="suffix">${currencySymbol()}</span></div>
+      </label>
+    </div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Stratégie</th><th>Libre de dettes</th><th class="num">Intérêts restants</th><th class="num">Économie</th></tr></thead>
+      <tbody>${rows.map(
+        ([label, plan, order]) => html`<tr>
+          <td class="wrap"><strong>${label}</strong>${order ? html`<br><span class="muted small">Ordre : ${order.map((o) => o.name).join(' → ')}</span>` : ''}</td>
+          <td>${formatDate(plan.freeDate)}<br><span class="muted small">${plan.months} mois</span></td>
+          <td class="num money">${formatMoney(plan.interest, { decimals: false })}</td>
+          <td class="num money ${plan === base ? '' : 'pos'}">${plan === base ? '—' : formatMoney(base.interest - plan.interest, { decimals: false })}</td>
+        </tr>`,
+      )}</tbody>
+    </table></div>
+    <p class="muted small" style="margin-top:10px">${
+      several
+        ? "L'avalanche coûte toujours le moins d'intérêts. La boule de neige solde plus vite une première dette : selon une étude de la Kellogg School of Management (6 000 personnes endettées), ces « petites victoires » aident davantage à aller au bout. Dans les deux cas, la mensualité d'une dette soldée est reportée sur la suivante."
+        : 'Vérifiez auparavant les éventuelles indemnités de remboursement anticipé (simulateur « Remboursement anticipé »).'
+    }</p>
+  </section>`;
+}
 
 function parseRate(value) {
   const n = parseFloat(String(value).replace(',', '.').replace('%', '').trim());
@@ -149,6 +195,7 @@ export default {
           html`<span class="kpi-delta">${ratio == null ? 'Revenus des 3 derniers mois requis' : ratio > 0.35 ? html`<span class="delta-bad">Au-delà des 35 % recommandés</span>` : 'Seuil recommandé : 35 %'}</span>`,
         )}
       </section>
+      ${active.length ? strategyCard(active, today) : ''}
       <div class="cards">
         ${state.debts.map((d) => {
           const s = statuses.get(d.id);
@@ -176,7 +223,13 @@ export default {
       </div>`;
   },
 
-  mount(root) {
+  mount(root, { rerender }) {
+    const extraInput = root.querySelector('#strategy-extra');
+    extraInput?.addEventListener('change', () => {
+      const v = parseAmount(extraInput.value);
+      ui.extra = v != null && v >= 0 ? v : 0;
+      rerender();
+    });
     root.querySelector('[data-new-debt-inline]')?.addEventListener('click', () => openDebtForm());
     root.querySelectorAll('[data-edit-debt]').forEach((b) => b.addEventListener('click', () => openDebtForm(store.state.debts.find((d) => d.id === b.dataset.editDebt))));
   },

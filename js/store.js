@@ -1,36 +1,155 @@
 // État de l'application, persistance et actions de modification.
-import { dueOccurrences, transactionFromRule, accountBalance } from './calc.js';
+import { dueOccurrences, invalidateDerived, transactionFromRule, accountBalance } from './calc.js';
 import { emptyState, defaultCategories } from './defaults.js';
 import { buildDemoState } from './demo.js';
-import { isValidISODate, todayISO, uid, monthKey } from './utils.js';
+import { todayISO, uid, monthKey } from './utils.js';
 
 export const STORAGE_KEY = 'budget-app-data-v1';
 
 /* ------------------------------------------------------------------ */
-/* Stockage (remplaçable, ex. pour un autre support que localStorage)  */
+/* Stockage                                                            */
 /* ------------------------------------------------------------------ */
+// IndexedDB est asynchrone et n'est pas limité à ~5 Mo, contrairement à
+// localStorage qui bloque l'affichage pendant l'écriture. localStorage ne
+// sert plus que de secours (navigateur sans IndexedDB) et pour la migration.
 
-let adapter = {
+const IDB_NAME = 'pecule';
+const IDB_STORE = 'donnees';
+
+function readLegacy() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+const localAdapter = {
+  kind: 'localStorage',
   async load() {
-    try {
-      const text = localStorage.getItem(STORAGE_KEY);
-      return text ? JSON.parse(text) : null;
-    } catch {
-      return null;
-    }
+    const text = readLegacy();
+    return text ? { data: JSON.parse(text) } : null;
   },
-  async save(data) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      return true;
-    } catch {
-      return false;
-    }
+  async save(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   },
 };
 
+function idbRequest(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function openIndexedDb() {
+  const request = indexedDB.open(IDB_NAME, 1);
+  request.onupgradeneeded = () => request.result.createObjectStore(IDB_STORE);
+  return idbRequest(request);
+}
+
+function groupByMonth(transactions) {
+  const months = new Map();
+  for (const t of transactions) {
+    const key = t.date.slice(0, 7);
+    let list = months.get(key);
+    if (!list) months.set(key, (list = []));
+    list.push(t);
+  }
+  return months;
+}
+
+/**
+ * Les opérations sont rangées par mois (clés « tx-2026-09 ») et le reste dans « meta » :
+ * une modification ne réécrit que le mois concerné, quelques kilo-octets au lieu de tout
+ * l'historique. Les mois inchangés sont reconnus par l'identité des objets (le store ne
+ * modifie jamais une opération en place, il la remplace).
+ */
+function indexedDbAdapter(db) {
+  let saved = new Map();
+  return {
+    kind: 'indexedDB',
+    async load() {
+      const store = db.transaction(IDB_STORE).objectStore(IDB_STORE);
+      const meta = await idbRequest(store.get('meta'));
+      if (meta) {
+        const chunks = await idbRequest(store.getAll(IDBKeyRange.bound('tx-', 'tx-\uffff')));
+        const data = JSON.parse(meta);
+        data.transactions = chunks.flatMap((chunk) => JSON.parse(chunk));
+        return { data };
+      }
+      // Données d'une version précédente : elles seront recopiées puis retirées de localStorage.
+      const legacy = readLegacy();
+      return legacy ? { data: JSON.parse(legacy), migrated: true } : null;
+    },
+    remember(state) {
+      saved = groupByMonth(state.transactions);
+    },
+    save(state) {
+      const months = groupByMonth(state.transactions);
+      const { transactions, ...meta } = state;
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        let written = 0;
+        for (const [month, list] of months) {
+          const previous = saved.get(month);
+          if (previous && previous.length === list.length && previous.every((t, i) => t === list[i])) continue;
+          store.put(JSON.stringify(list), `tx-${month}`);
+          written++;
+        }
+        for (const month of saved.keys()) if (!months.has(month)) store.delete(`tx-${month}`);
+        store.put(JSON.stringify(meta), 'meta');
+        tx.oncomplete = () => {
+          saved = months;
+          resolve(written);
+        };
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    },
+    clearLegacy() {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* rien à libérer */
+      }
+    },
+  };
+}
+
+let adapter = null;
+
 export function setStorageAdapter(next) {
   adapter = next;
+}
+
+async function pickAdapter() {
+  if (adapter) return adapter;
+  if (typeof indexedDB !== 'undefined') {
+    try {
+      return indexedDbAdapter(await openIndexedDb());
+    } catch {
+      /* IndexedDB indisponible (navigation privée de certains navigateurs) */
+    }
+  }
+  return localAdapter;
+}
+
+/** Copie de l'état pour « Annuler » : seules les opérations (volumineuses) sont partagées. */
+function snapshotOf(state) {
+  return {
+    ...state,
+    settings: { ...state.settings },
+    accounts: structuredClone(state.accounts),
+    categories: structuredClone(state.categories),
+    transactions: state.transactions.slice(),
+    budgets: structuredClone(state.budgets),
+    budgetOverrides: structuredClone(state.budgetOverrides),
+    recurring: structuredClone(state.recurring),
+    goals: structuredClone(state.goals),
+    debts: structuredClone(state.debts),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -38,6 +157,20 @@ export function setStorageAdapter(next) {
 /* ------------------------------------------------------------------ */
 
 const TX_TYPES = new Set(['expense', 'income', 'transfer']);
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** Validation rapide d'une date « AAAA-MM-JJ » (sans créer d'objet Date). */
+function validDate(iso) {
+  if (typeof iso !== 'string' || !ISO_DATE.test(iso)) return false;
+  const y = +iso.slice(0, 4);
+  const m = +iso.slice(5, 7);
+  const d = +iso.slice(8, 10);
+  if (m < 1 || m > 12 || d < 1) return false;
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return d <= (m === 2 && leap ? 29 : MONTH_DAYS[m - 1]);
+}
 
 function toInt(v, fallback = 0) {
   const n = Math.round(Number(v));
@@ -84,7 +217,7 @@ export function normalizeState(input) {
   const categoryIds = new Set(state.categories.map((c) => c.id));
 
   state.transactions = state.transactions
-    .filter((t) => t && TX_TYPES.has(t.type) && isValidISODate(t.date) && accountIds.has(t.accountId))
+    .filter((t) => t && TX_TYPES.has(t.type) && validDate(t.date) && accountIds.has(t.accountId))
     .map((t) => ({
       id: t.id || uid('tx-'),
       description: '',
@@ -115,7 +248,7 @@ export function normalizeState(input) {
   }
 
   state.recurring = state.recurring
-    .filter((r) => r && r.id && TX_TYPES.has(r.type) && isValidISODate(r.startDate))
+    .filter((r) => r && r.id && TX_TYPES.has(r.type) && validDate(r.startDate))
     .map((r) => ({ active: true, autoCreate: true, lastDate: null, endDate: null, tags: [], frequency: 'monthly', ...r, amount: Math.abs(toInt(r.amount)) }));
 
   state.goals = state.goals
@@ -130,7 +263,7 @@ export function normalizeState(input) {
     }));
 
   state.debts = state.debts
-    .filter((d) => d && d.id && isValidISODate(d.startDate))
+    .filter((d) => d && d.id && validDate(d.startDate))
     .map((d) => ({ kind: 'autre', insurance: 0, ...d, principal: toInt(d.principal), rate: Number(d.rate) || 0, termMonths: toInt(d.termMonths, 12) }));
 
   return state;
@@ -147,17 +280,36 @@ class Store {
     this.lastSnapshot = null;
     this.saveTimer = null;
     this.saveFailed = false;
+    this.dirty = false;
+    this.storageKind = null;
+    // Incrémenté à chaque modification : sert de clé aux calculs mis en cache par les vues.
+    this.revision = 0;
   }
 
   async init() {
-    const data = await adapter.load();
-    if (data) {
+    adapter = await pickAdapter();
+    this.storageKind = adapter.kind;
+    let loaded = null;
+    try {
+      loaded = await adapter.load();
+    } catch {
+      loaded = null;
+    }
+    if (loaded?.data) {
       try {
-        this.state = normalizeState(data);
-        return 'loaded';
+        this.state = normalizeState(loaded.data);
       } catch {
         this.state = emptyState();
+        return 'empty';
       }
+      if (loaded.migrated) {
+        // Première ouverture après la mise à jour : copie complète, puis libération de localStorage.
+        this.dirty = true;
+        this.flush().then((ok) => ok && adapter.clearLegacy?.());
+      } else {
+        adapter.remember?.(this.state);
+      }
+      return 'loaded';
     }
     return 'empty';
   }
@@ -171,18 +323,39 @@ class Store {
     for (const fn of this.listeners) fn(this.state, change);
   }
 
+  /** Programme une sauvegarde pendant un temps mort du navigateur. */
   persist() {
+    this.dirty = true;
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(async () => {
-      const ok = await adapter.save(this.state);
-      this.saveFailed = !ok;
-    }, 150);
+    this.saveTimer = setTimeout(() => {
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(() => this.flush(), { timeout: 2000 });
+      else this.flush();
+    }, 300);
+  }
+
+  /** Écrit immédiatement les modifications en attente (ex. quand l'app passe en arrière-plan). */
+  async flush() {
+    clearTimeout(this.saveTimer);
+    if (!this.dirty || !adapter) return true;
+    this.dirty = false;
+    const wasFailing = this.saveFailed;
+    try {
+      await adapter.save(this.state);
+      this.saveFailed = false;
+    } catch {
+      this.saveFailed = true;
+      this.dirty = true;
+    }
+    if (wasFailing !== this.saveFailed) this.emit('storage');
+    return !this.saveFailed;
   }
 
   /** Applique une modification, sauvegarde et notifie. */
   commit(mutator, { snapshot = false, change = null } = {}) {
-    if (snapshot) this.lastSnapshot = JSON.stringify(this.state);
+    if (snapshot) this.lastSnapshot = snapshotOf(this.state);
     const result = mutator(this.state);
+    this.revision++;
+    invalidateDerived(this.state);
     this.persist();
     this.emit(change);
     return result;
@@ -191,22 +364,52 @@ class Store {
   /** Revient à l'état précédent la dernière action destructive. */
   undo() {
     if (!this.lastSnapshot) return false;
-    this.state = JSON.parse(this.lastSnapshot);
+    this.state = this.lastSnapshot;
     this.lastSnapshot = null;
+    this.revision++;
+    invalidateDerived(this.state);
     this.persist();
     this.emit('undo');
     return true;
   }
 
   replace(next) {
-    this.lastSnapshot = JSON.stringify(this.state);
+    this.lastSnapshot = this.state;
     this.state = next;
+    this.revision++;
+    invalidateDerived(next);
     this.persist();
     this.emit('replace');
   }
 }
 
 export const store = new Store();
+
+/**
+ * Demande un stockage persistant : le navigateur ne l'effacera pas pour libérer de la place.
+ * Chrome décide seul ; Firefox demande l'accord de l'utilisateur.
+ */
+export async function requestPersistence() {
+  try {
+    if (!navigator.storage?.persist) return null;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return null;
+  }
+}
+
+/** État du stockage pour la page des paramètres. */
+export async function storageInfo() {
+  const info = { kind: store.storageKind, persisted: null, usage: null, quota: null };
+  try {
+    if (navigator.storage?.persisted) info.persisted = await navigator.storage.persisted();
+    if (navigator.storage?.estimate) Object.assign(info, await navigator.storage.estimate());
+  } catch {
+    /* API absente */
+  }
+  return info;
+}
 
 /* ------------------------------------------------------------------ */
 /* Actions                                                             */
@@ -247,10 +450,11 @@ export function deleteTransactions(ids) {
   }, { snapshot: true });
 }
 
+// Les opérations sont partagées avec la copie « Annuler » : on les remplace au lieu de les modifier.
 export function setCleared(ids, cleared) {
   const set = new Set(ids);
   store.commit((s) => {
-    for (const t of s.transactions) if (set.has(t.id)) t.cleared = cleared;
+    s.transactions = s.transactions.map((t) => (set.has(t.id) && t.cleared !== cleared ? { ...t, cleared } : t));
   });
 }
 
@@ -258,9 +462,7 @@ export function recategorize(ids, categoryId) {
   const set = new Set(ids);
   store.commit((s) => {
     const cat = s.categories.find((c) => c.id === categoryId);
-    for (const t of s.transactions) {
-      if (set.has(t.id) && t.type !== 'transfer' && (!cat || cat.type === t.type)) t.categoryId = categoryId;
-    }
+    s.transactions = s.transactions.map((t) => (set.has(t.id) && t.type !== 'transfer' && (!cat || cat.type === t.type) ? { ...t, categoryId } : t));
   }, { snapshot: true });
 }
 
@@ -313,7 +515,7 @@ export function saveCategory(category) {
 export function deleteCategory(id, replacementId = null) {
   store.commit((s) => {
     s.categories = s.categories.filter((c) => c.id !== id);
-    for (const t of s.transactions) if (t.categoryId === id) t.categoryId = replacementId;
+    s.transactions = s.transactions.map((t) => (t.categoryId === id ? { ...t, categoryId: replacementId } : t));
     for (const r of s.recurring) if (r.categoryId === id) r.categoryId = replacementId;
     delete s.budgets[id];
     for (const month of Object.values(s.budgetOverrides)) delete month[id];

@@ -6,6 +6,7 @@ import {
   byTag,
   change,
   filterTransactions,
+  firstTransactionDate,
   groupSplit,
   monthlyTotals,
   monthsInPeriod,
@@ -252,7 +253,7 @@ function compute(state) {
   const prevTxs = filterTransactions(state, { ...prevRange, accountId: ui.accountId || undefined });
   const cur = summarize(txs);
   const prev = summarize(prevTxs);
-  const firstDate = state.transactions.reduce((min, t) => (!min || t.date < min ? t.date : min), null);
+  const firstDate = firstTransactionDate(state);
   const comparable = !!firstDate && firstDate <= prevRange.from;
   const monthKeys = monthRange(monthKey(range.from), monthKey(range.to));
   const months = monthlyTotals(state, monthKeys, { accountId: ui.accountId || null });

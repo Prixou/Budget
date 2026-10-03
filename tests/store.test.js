@@ -53,3 +53,12 @@ test('le service worker met en cache tous les modules', () => {
   ];
   for (const f of files) assert.ok(sw.includes(`'${f}'`), `${f} absent de sw.js`);
 });
+
+test('index.html précharge tous les modules', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const files = [
+    ...readdirSync(new URL('../js', import.meta.url)).filter((f) => f.endsWith('.js')).map((f) => `js/${f}`),
+    ...readdirSync(new URL('../js/views', import.meta.url)).map((f) => `js/views/${f}`),
+  ];
+  for (const f of files) assert.ok(html.includes(`<link rel="modulepreload" href="${f}">`), `${f} non préchargé`);
+});

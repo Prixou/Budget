@@ -10,19 +10,23 @@ import {
   filterTransactions,
   goalStats,
   monthPace,
+  firstTransactionDate,
   monthlyTotals,
   netWorth,
-  sortTransactions,
   summarize,
+  transactionsByDate,
   upcoming,
 } from '../calc.js';
 import { chartSlot, hbars, legend, meter } from '../charts.js';
 import { catBadge, deltaText, groupedTxList, kpi, lookups, monthNav, statusPill, transferBadge } from '../components.js';
+import { cashForecast } from '../insights.js';
 import { confirmOccurrence, skipOccurrence } from '../store.js';
+import { healthCard } from './optimisation.js';
 import { emptyState, icon, toast } from '../ui.js';
 import {
   addDays,
   capitalize,
+  daysInMonth,
   formatDate,
   formatMoney,
   formatPercent,
@@ -58,11 +62,19 @@ export default {
 
     const txs = filterTransactions(state, { from: monthStart(month), to: monthEnd(month) });
     const prevMonth = shiftMonth(month, -1);
-    const prevTxs = filterTransactions(state, { from: monthStart(prevMonth), to: monthEnd(prevMonth) });
+    const inProgress = month === monthKey(today);
+    // Mois en cours : comparaison avec la même période du mois précédent (du 1er au même jour).
+    const [py, pm] = prevMonth.split('-').map(Number);
+    const prevTo = inProgress ? `${prevMonth}-${String(Math.min(Number(today.slice(8, 10)), daysInMonth(py, pm - 1))).padStart(2, '0')}` : monthEnd(prevMonth);
+    const prevTxs = filterTransactions(state, { from: monthStart(prevMonth), to: prevTo });
+    const versus = inProgress ? 'vs même période du mois dernier' : 'vs mois précédent';
     const cur = summarize(txs);
     const prev = summarize(prevTxs);
+    const expectedIncome = inProgress ? sum(upcoming(state, addDays(today, 1), monthEnd(month)).filter((u) => u.rule.type === 'income'), (u) => u.rule.amount) : 0;
+    const savingsPending = expectedIncome > 0 && cur.income < cur.expense;
     const worth = netWorth(state, today);
     const forecast = endOfMonthForecast(state, today);
+    const cash = cashForecast(state, today, 31);
     const isCurrent = month === monthKey(today);
     const pace = monthPace(state, month, today);
 
@@ -76,7 +88,7 @@ export default {
       .map((rule) => ({ rule, dates: dueOccurrences(rule, today) }))
       .filter((p) => p.dates.length);
     const nextItems = upcoming(state, addDays(today, 1), addDays(today, 30)).slice(0, 6);
-    const firstDate = state.transactions.reduce((min, t) => (t.date < min ? t.date : min), today);
+    const firstDate = firstTransactionDate(state) || today;
     const comparable = firstDate <= monthStart(prevMonth);
 
     const months = monthRange(shiftMonth(month, -5), month);
@@ -87,7 +99,9 @@ export default {
     const catRows = topCats.map((c) => ({ label: c.category.name, icon: c.category.icon, value: c.total, share: c.share }));
     if (rest.length) catRows.push({ label: `Autres (${rest.length})`, icon: '·', value: sum(rest, (c) => c.total), share: sum(rest, (c) => c.share) });
 
-    const recent = sortTransactions(state.transactions.filter((t) => t.date <= today)).slice(0, 7);
+    const byDate = transactionsByDate(state);
+    const recent = [];
+    for (let i = byDate.length - 1; i >= 0 && recent.length < 7; i--) if (byDate[i].date <= today) recent.push(byDate[i]);
     const goals = state.goals.filter((g) => !g.archived).slice(0, 4);
 
     const alerts = [];
@@ -118,23 +132,32 @@ export default {
           <span class="hero-value money">${formatMoney(worth.assets - worth.liabilities + worth.debts)}</span>
           <div class="hero-meta">
             <span>Fin de mois prévue : <strong class="money">${formatMoney(forecast.forecast)}</strong></span>
+            ${cash.accounts.length ? html`<span>Disponible à dépenser : <strong class="money">${formatMoney(cash.available, { decimals: false })}</strong> (${formatMoney(cash.perDay, { decimals: false })} / jour)</span>` : ''}
             ${worth.debts ? html`<span>Crédits restants : <strong class="money">${formatMoney(worth.debts)}</strong></span>` : ''}
             ${worth.debts ? html`<span>Patrimoine net : <strong class="money">${formatMoney(worth.net)}</strong></span>` : ''}
           </div>
         </div>
         <div class="hero-kpis"><div class="kpis">
-          ${kpi('Revenus du mois', formatMoney(cur.income), deltaText(comparable ? change(cur.income, prev.income) : null, { suffix: 'vs mois précédent' }))}
-          ${kpi('Dépenses du mois', formatMoney(cur.expense), deltaText(comparable ? change(cur.expense, prev.expense) : null, { goodWhenUp: false, suffix: 'vs mois précédent' }))}
+          ${kpi('Revenus du mois', formatMoney(cur.income), deltaText(comparable ? change(cur.income, prev.income) : null, { suffix: versus }))}
+          ${kpi('Dépenses du mois', formatMoney(cur.expense), deltaText(comparable ? change(cur.expense, prev.expense) : null, { goodWhenUp: false, suffix: versus }))}
           ${kpi('Reste à vivre', html`<span class="${cur.net < 0 ? 'neg' : ''}">${formatMoney(cur.net, { sign: 'always' })}</span>`, html`<span class="kpi-delta">Revenus − dépenses</span>`)}
           ${kpi(
             "Taux d'épargne",
-            cur.savingsRate == null ? '—' : formatPercent(cur.savingsRate),
-            html`<span class="kpi-delta">${prev.savingsRate == null || !comparable ? 'Part des revenus non dépensée' : `${formatPercent(prev.savingsRate)} le mois précédent`}</span>`,
+            savingsPending || cur.savingsRate == null ? '—' : cur.savingsRate < -1 ? '< −100 %' : formatPercent(cur.savingsRate),
+            html`<span class="kpi-delta">${
+              savingsPending
+                ? `${formatMoney(expectedIncome, { decimals: false })} de revenus encore attendus ce mois-ci`
+                : prev.savingsRate == null || !comparable
+                  ? 'Part des revenus non dépensée'
+                  : `${formatPercent(prev.savingsRate)} ${inProgress ? 'à la même date le mois dernier' : 'le mois précédent'}`
+            }</span>`,
           )}
         </div></div>
       </section>
 
       ${alerts.length ? html`<div class="stack-v">${alerts}</div>` : ''}
+
+      ${isCurrent ? html`<div id="health-slot" class="health-slot"></div>` : ''}
 
       <div class="grid grid-main">
         <section class="card">
@@ -260,7 +283,17 @@ export default {
     `;
   },
 
-  mount(root) {
+  mount(root, { state }) {
+    // Les conseils sont calculés après l'affichage, pendant un temps mort : l'écran répond tout de suite.
+    const slot = root.querySelector('#health-slot');
+    if (slot) {
+      const fill = () => {
+        if (!slot.isConnected) return;
+        slot.outerHTML = String(healthCard(state));
+      };
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(fill, { timeout: 800 });
+      else setTimeout(fill, 0);
+    }
     root.querySelectorAll('[data-confirm-occ]').forEach((btn) =>
       btn.addEventListener('click', () => {
         confirmOccurrence(btn.dataset.confirmOcc, btn.dataset.date);

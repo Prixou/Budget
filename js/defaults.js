@@ -9,6 +9,44 @@ export const ACCOUNT_TYPES = {
   autre: { label: 'Autre', icon: 'wallet' },
 };
 
+/**
+ * Produits d'épargne (pour les comptes de type « épargne »).
+ * Taux nets en % au 1er août 2026, plafonds de dépôt en centimes.
+ * Sources : Banque de France / ministère de l'Économie (annonce du 15 juillet 2026),
+ * rapport ACPR du 30 juin 2026 pour les fonds en euros. Voir docs/RECHERCHE.md.
+ */
+export const SAVINGS_PRODUCTS = {
+  livretA: { label: 'Livret A', rate: 1.7, cap: 2295000, taxFree: true },
+  ldds: { label: 'LDDS', rate: 1.7, cap: 1200000, taxFree: true },
+  lep: { label: "LEP (Livret d'épargne populaire)", rate: 2.5, cap: 1000000, taxFree: true, meansTested: true },
+  livretJeune: { label: 'Livret jeune', rate: 1.7, cap: 160000, taxFree: true },
+  cel: { label: "CEL (Compte épargne logement)", rate: 1.25, cap: 1530000, taxFree: false },
+  pel: { label: "PEL (ouvert depuis 2026)", rate: 2.0, cap: 6120000, taxFree: false },
+  fondsEuros: { label: 'Assurance vie (fonds en euros)', rate: 2.63, cap: null, taxFree: false },
+  autre: { label: 'Autre livret / compte rémunéré', rate: 0, cap: null, taxFree: false },
+};
+
+/** Repères économiques utilisés par les conseils (France, 2026). */
+export const REFERENCE = {
+  ratesDate: '2026-08-01',
+  livretARate: 1.7,
+  lepRate: 2.5,
+  fondsEurosRate: 2.63, // rendement moyen 2025 (ACPR, juin 2026)
+  inflation: 2.3, // prévision Banque de France pour 2026 (septembre 2026)
+  lepIncomeLimitSingle: 2302800, // revenu fiscal de référence 2024, 1 part
+  lepIncomeLimitCouple: 3532600, // 2 parts
+  bankFeesTraditional: 19190, // moyenne annuelle banque traditionnelle (2026)
+  bankFeesOnline: 2000, // 0 à 20 € par an en banque en ligne
+  debtRatioMax: 0.35, // HCSF, assurance comprise
+  mortgageMaxYears: 25, // 27 ans dans le neuf (VEFA)
+  mortgageMarket15y: 3.4, // fourchette de marché 2026 : 3,4 % (15 ans)
+  mortgageMarket25y: 4.2, // à 4,2 % (25 ans)
+  renegotiationGap: 0.7, // écart de taux minimal pour qu'une renégociation soit rentable
+  emergencyMonthsStable: 3,
+  emergencyMonthsVariable: 6,
+  savingsRateTarget: 0.2,
+};
+
 export const CATEGORY_GROUPS = {
   needs: { label: 'Besoins', hint: 'Dépenses essentielles : logement, courses, transport…', target: 0.5 },
   wants: { label: 'Envies', hint: 'Loisirs, restaurants, shopping…', target: 0.3 },
@@ -100,6 +138,12 @@ export function emptyState() {
       privacy: false,
       demo: false,
       onboarded: false,
+      incomeStability: 'stable', // 'stable' (CDI, retraite) ou 'variable' (indépendant, intérim)
+      lepEligible: 'unknown', // 'yes' | 'no' | 'unknown'
+      lastBackup: null,
+      backupSnoozedUntil: null,
+      dismissedTips: [],
+      ignoredRecurring: [],
     },
     accounts: [],
     categories: defaultCategories(),

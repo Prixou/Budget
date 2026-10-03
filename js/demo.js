@@ -29,7 +29,7 @@ export function buildDemoState(today) {
 
   state.accounts = [
     { id: 'acc-courant', name: 'Compte courant', type: 'courant', initialBalance: 184000, archived: false, includeInTotal: true, createdAt: 1 },
-    { id: 'acc-livret', name: 'Livret A', type: 'epargne', initialBalance: 450000, archived: false, includeInTotal: true, createdAt: 2 },
+    { id: 'acc-livret', name: 'Livret A', type: 'epargne', product: 'livretA', initialBalance: 450000, archived: false, includeInTotal: true, createdAt: 2 },
     { id: 'acc-especes', name: 'Porte-monnaie', type: 'especes', initialBalance: 6000, archived: false, includeInTotal: true, createdAt: 3 },
     { id: 'acc-pea', name: 'PEA', type: 'investissement', initialBalance: 215000, archived: false, includeInTotal: true, createdAt: 4 },
   ];
@@ -118,6 +118,11 @@ export function buildDemoState(today) {
     if (chance(0.3)) add({ type: 'expense', amount: between(15, 90), date: day(), accountId: 'acc-courant', categoryId: 'cat-maison', description: pick(['Bricolage', 'Petit électroménager', 'Jardinage']) });
     if (chance(0.25)) add({ type: 'expense', amount: between(25, 60), date: day(), accountId: 'acc-courant', categoryId: 'cat-animaux', description: pick(['Croquettes', 'Vétérinaire']) });
     if (chance(0.4)) add({ type: 'income', amount: between(250, 650), date: day(), accountId: 'acc-courant', categoryId: 'cat-freelance', description: pick(['Mission graphisme', 'Cours particuliers', 'Prestation web']), tags: ['freelance'] });
+    // Abonnements jamais déclarés comme récurrents : l'onglet Optimisation les détecte.
+    const subDay = (d) => `${month}-${String(Math.min(d, daysInMonth(y, m - 1))).padStart(2, '0')}`;
+    if (subDay(17) <= today) add({ type: 'expense', amount: 999, date: subDay(17), accountId: 'acc-courant', categoryId: 'cat-abonnements', description: 'PRLV SEPA Presse en ligne' });
+    if (subDay(9) <= today) add({ type: 'expense', amount: 899, date: subDay(9), accountId: 'acc-courant', categoryId: 'cat-abonnements', description: 'CB Plateforme vidéo 2' });
+    if (subDay(3) <= today) add({ type: 'expense', amount: 299, date: subDay(3), accountId: 'acc-courant', categoryId: 'cat-telecom', description: 'Stockage photos en ligne' });
     // Retrait d'espèces
     add({ type: 'transfer', amount: 6000, date: `${month}-${String(Math.min(2, lastDay)).padStart(2, '0')}`, accountId: 'acc-courant', toAccountId: 'acc-especes', categoryId: null, description: 'Retrait distributeur' });
 
@@ -131,6 +136,8 @@ export function buildDemoState(today) {
     if (m === 6 || m === 12) add({ type: 'income', amount: between(400, 600), date: day(), accountId: 'acc-courant', categoryId: 'cat-primes', description: 'Prime semestrielle' });
     if (m === 9) add({ type: 'expense', amount: between(90, 160), date: day(), accountId: 'acc-courant', categoryId: 'cat-impots', description: 'Solde impôt sur le revenu' });
     if (month === shiftMonth(thisMonth, -3)) add({ type: 'income', amount: between(11, 14), date: day(), accountId: 'acc-livret', categoryId: 'cat-placements', description: 'Intérêts Livret A' });
+    // Une grosse dépense récente, inhabituelle pour sa catégorie.
+    if (month === thisMonth) add({ type: 'expense', amount: 64000, date: addDays(today, -6) >= `${month}-01` ? addDays(today, -6) : `${month}-01`, accountId: 'acc-courant', categoryId: 'cat-transport', description: 'Garage : réparation embrayage' });
   }
 
   // Les opérations de plus de 5 jours sont pointées (rapprochées du relevé).
