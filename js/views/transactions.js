@@ -2,6 +2,7 @@
 import { filterTransactions, sortTransactions, summarize, warmSearchIndex } from '../calc.js';
 import { groupedTxList, lookups, monthNav } from '../components.js';
 import { toCSV } from '../csv.js';
+import { shareOf } from '../family.js';
 import { deleteTransactions, recategorize, setCleared, store } from '../store.js';
 import { accountOptions, confirmDialog, emptyState, icon, offerFile, options, toast } from '../ui.js';
 import { centsToInput, formatMoney, html, monthEnd, monthStart, pluralize, raw, todayISO } from '../utils.js';
@@ -17,6 +18,7 @@ const ui = {
   categoryId: '',
   cleared: '',
   tag: '',
+  share: '',
   search: '',
   sort: 'date-desc',
   limit: PAGE,
@@ -44,7 +46,7 @@ function currentFilters(session) {
 }
 
 function activeFilterCount() {
-  return ['type', 'accountId', 'categoryId', 'cleared', 'tag'].filter((k) => ui[k]).length;
+  return ['type', 'accountId', 'categoryId', 'cleared', 'tag', 'share'].filter((k) => ui[k]).length;
 }
 
 function exportCSV(state, txs) {
@@ -77,8 +79,9 @@ export default {
   enter({ params, session }) {
     ui.selected.clear();
     ui.limit = PAGE;
-    if (params.account || params.category || params.tag || params.search) {
-      Object.assign(ui, { type: '', accountId: '', categoryId: '', cleared: '', tag: '', search: '' });
+    if (params.account || params.category || params.tag || params.search || params.share) {
+      Object.assign(ui, { type: '', accountId: '', categoryId: '', cleared: '', tag: '', share: '', search: '' });
+      if (params.share) ui.share = params.share;
       if (params.account) ui.accountId = params.account;
       if (params.category) ui.categoryId = params.category;
       if (params.tag) ui.tag = params.tag;
@@ -101,7 +104,15 @@ export default {
   render({ state, session }) {
     const maps = lookups(state);
     const filters = currentFilters(session);
-    const all = sortTransactions(filterTransactions(state, filters), ui.sort);
+    const couple = state.household?.enabled;
+    if (!couple) ui.share = '';
+    let found = filterTransactions(state, filters);
+    if (ui.share) {
+      // « Pour qui » : dépenses communes ou personnelles (mode couple).
+      const accounts = new Map(state.accounts.map((a) => [a.id, a]));
+      found = found.filter((t) => t.type === 'expense' && shareOf(t, accounts) === ui.share);
+    }
+    const all = sortTransactions(found, ui.sort);
     const shown = all.slice(0, ui.limit);
     const stats = summarize(all);
     const transfers = all.filter((t) => t.type === 'transfer').length;
@@ -161,6 +172,17 @@ export default {
             ui.cleared,
             { placeholder: 'Toutes' },
           )}</select></label>
+          ${couple
+            ? html`<label class="field"><span>Pour qui</span><select class="select" data-filter="share" id="tx-f-share">${options(
+                [
+                  { value: 'shared', label: 'Dépenses communes' },
+                  { value: 'p1', label: state.household.partners[0].name },
+                  { value: 'p2', label: state.household.partners[1].name },
+                ],
+                ui.share,
+                { placeholder: 'Tout le monde' },
+              )}</select></label>`
+            : ''}
           ${tags.length ? html`<label class="field"><span>Étiquette</span><select class="select" data-filter="tag" id="tx-f-tag">${options(tags.map((t) => ({ value: t, label: `#${t}` })), ui.tag, { placeholder: 'Toutes' })}</select></label>` : ''}
           <label class="field"><span>Tri</span><select class="select" data-filter="sort" id="tx-f-sort">${options(
             [
@@ -259,7 +281,7 @@ export default {
       }),
     );
     root.querySelector('#tx-reset')?.addEventListener('click', () => {
-      Object.assign(ui, { type: '', accountId: '', categoryId: '', cleared: '', tag: '', search: '', sort: 'date-desc' });
+      Object.assign(ui, { type: '', accountId: '', categoryId: '', cleared: '', tag: '', share: '', search: '', sort: 'date-desc' });
       rerender();
     });
     root.querySelector('#tx-more')?.addEventListener('click', () => {

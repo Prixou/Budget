@@ -20,6 +20,7 @@ import {
   upcoming,
 } from './calc.js';
 import { REFERENCE, SAVINGS_PRODUCTS } from './defaults.js';
+import { averageSharedSpending, babyPlan, balanceStatement, coupleLedger, partnerName, splitRatio } from './family.js';
 import { addDays, addMonths, daysBetween, monthEnd, monthKey, monthRange, normalizeText, shiftMonth, sum, todayISO } from './utils.js';
 
 /* ------------------------------------------------------------------ */
@@ -961,7 +962,8 @@ export function recommendations(state, today = todayISO(), base = baseline(state
   // 15. Objectifs en retard (versements des 3 derniers mois, mois en cours compris)
   const windowStart = `${shiftMonth(monthKey(today), -2)}-01`;
   const late = [];
-  for (const goal of state.goals.filter((g) => !g.archived)) {
+  const recent = new Date(`${today}T12:00:00`).getTime() - 30 * 86400000;
+  for (const goal of state.goals.filter((g) => !g.archived && !(g.createdAt > recent))) {
     const st = goalStats(goal, today);
     if (st.done || !st.monthlyNeeded) continue;
     const pace = sum((goal.contributions || []).filter((c) => c.date >= windowStart && c.date <= today), (c) => c.amount) / 3;
@@ -977,6 +979,53 @@ export function recommendations(state, today = todayISO(), base = baseline(state
       gain: null,
       action: { type: 'link', href: '#objectifs', label: 'Voir mes objectifs' },
     });
+  }
+
+  // 16. Arrivée de bébé : épargne à constituer avant la naissance
+  const plan = state.baby?.dueDate && state.baby.dueDate > today && state.household ? babyPlan(state.baby, state.household, { today }) : null;
+  if (plan && plan.savingsTarget > 0 && !state.goals.some((g) => g.id === 'goal-bebe')) {
+    const twins = plan.count > 1;
+    tips.push({
+      id: 'baby-savings',
+      severity: 'medium',
+      pillar: 'plan',
+      title: `Arrivée ${twins ? 'des jumeaux' : 'de bébé'} : ${fmt(plan.savingsTarget)} à mettre de côté`,
+      text: `D'ici la naissance, environ ${fmt(plan.monthlySaving)} par mois couvrent les achats, les dépenses des premiers mois et la baisse de revenus pendant les congés, aides de la CAF déduites. Ensuite, comptez ${fmt(plan.steadyMonthly.net)} par mois${plan.childcare.mode === 'famille' ? '' : ', garde comprise'}.`,
+      gain: null,
+      action: { type: 'create-goal', goal: { id: 'goal-bebe', name: twins ? 'Arrivée des jumeaux' : 'Arrivée de bébé', icon: '👶', target: plan.savingsTarget, deadline: plan.due }, label: 'Créer cet objectif' },
+    });
+  }
+
+  // 17. Couple : équilibre à régler, partage 50/50 avec des revenus très différents
+  const household = state.household;
+  if (household?.enabled) {
+    const balance = balanceStatement(household, coupleLedger(state).net);
+    if (balance.amount >= 5000) {
+      tips.push({
+        id: `couple-balance-${Math.round(balance.amount / 5000)}`,
+        severity: 'low',
+        pillar: 'plan',
+        title: `${partnerName(household, balance.debtor)} doit ${fmt(balance.amount)} à ${partnerName(household, balance.creditor)}`,
+        text: 'Des dépenses communes ont été payées depuis un compte personnel, ou des dépenses personnelles depuis le compte joint. Un virement remet l’équilibre à zéro.',
+        gain: null,
+        action: { type: 'link', href: '#couple', label: 'Voir l’équilibre' },
+      });
+    }
+    const [i1, i2] = household.partners.map((p) => p.income);
+    const shared = averageSharedSpending(state, today);
+    if (household.split === 'equal' && i1 > 0 && i2 > 0 && Math.max(i1, i2) / Math.min(i1, i2) >= 1.3 && shared > 0) {
+      const fair = splitRatio({ ...household, split: 'income' });
+      const low = i1 < i2 ? 0 : 1;
+      tips.push({
+        id: 'couple-split',
+        severity: 'low',
+        pillar: 'plan',
+        title: 'Partager au prorata des revenus ?',
+        text: `À 50/50, ${household.partners[low].name} consacre ${Math.round((shared / 2 / household.partners[low].income) * 100)} % de ses revenus aux dépenses communes, contre ${Math.round((shared / 2 / household.partners[1 - low].income) * 100)} % pour ${household.partners[1 - low].name}. Au prorata (${Math.round(fair.p1 * 100)} / ${Math.round(fair.p2 * 100)}), chacun y consacrerait ${Math.round((shared / (i1 + i2)) * 100)} % et garderait la même capacité d'épargne.`,
+        gain: null,
+        action: { type: 'link', href: '#couple', label: 'Changer la règle' },
+      });
+    }
   }
 
   const dismissed = new Set(s.dismissedTips || []);

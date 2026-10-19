@@ -1,6 +1,6 @@
 // Jeu de données de démonstration réaliste (8 mois d'historique), déterministe.
 import { dueOccurrences, loanPayment, transactionFromRule } from './calc.js';
-import { emptyState } from './defaults.js';
+import { defaultBabyPlan, emptyState } from './defaults.js';
 import { addDays, addMonths, daysInMonth, monthKey, monthRange, shiftMonth } from './utils.js';
 
 function mulberry32(seed) {
@@ -16,7 +16,11 @@ function mulberry32(seed) {
 export function buildDemoState(today) {
   const rand = mulberry32(20260930);
   const between = (min, max) => Math.round((min + rand() * (max - min)) * 100);
+  // Générateur distinct pour les dépenses de Sam : la série principale reste identique.
+  const rand2 = mulberry32(20261019);
+  const between2 = (min, max) => Math.round((min + rand2() * (max - min)) * 100);
   const pick = (list) => list[Math.floor(rand() * list.length)];
+  const pick2 = (list) => list[Math.floor(rand2() * list.length)];
   const chance = (p) => rand() < p;
 
   const state = emptyState();
@@ -28,10 +32,11 @@ export function buildDemoState(today) {
   const start = `${firstMonth}-01`;
 
   state.accounts = [
-    { id: 'acc-courant', name: 'Compte courant', type: 'courant', initialBalance: 184000, archived: false, includeInTotal: true, createdAt: 1 },
-    { id: 'acc-livret', name: 'Livret A', type: 'epargne', product: 'livretA', initialBalance: 450000, archived: false, includeInTotal: true, createdAt: 2 },
-    { id: 'acc-especes', name: 'Porte-monnaie', type: 'especes', initialBalance: 6000, archived: false, includeInTotal: true, createdAt: 3 },
-    { id: 'acc-pea', name: 'PEA', type: 'investissement', initialBalance: 215000, archived: false, includeInTotal: true, createdAt: 4 },
+    { id: 'acc-courant', name: 'Compte joint', type: 'courant', owner: 'joint', initialBalance: 184000, archived: false, includeInTotal: true, createdAt: 1 },
+    { id: 'acc-sam', name: 'Compte de Sam', type: 'courant', owner: 'p2', initialBalance: 76000, archived: false, includeInTotal: true, createdAt: 2 },
+    { id: 'acc-livret', name: 'Livret A', type: 'epargne', product: 'livretA', owner: 'p1', initialBalance: 450000, archived: false, includeInTotal: true, createdAt: 3 },
+    { id: 'acc-especes', name: 'Porte-monnaie', type: 'especes', owner: 'joint', initialBalance: 6000, archived: false, includeInTotal: true, createdAt: 4 },
+    { id: 'acc-pea', name: 'PEA', type: 'investissement', owner: 'p1', initialBalance: 215000, archived: false, includeInTotal: true, createdAt: 5 },
   ];
 
   let createdAt = 1000;
@@ -63,22 +68,28 @@ export function buildDemoState(today) {
     ['rec-frais', 'expense', 250, 'acc-courant', null, 'cat-banque', 'Frais de tenue de compte', 'monthly', 1],
     ['rec-livret', 'transfer', 20000, 'acc-courant', 'acc-livret', null, 'Épargne mensuelle', 'monthly', 29],
     ['rec-pea', 'transfer', 10000, 'acc-courant', 'acc-pea', null, 'Versement PEA', 'monthly', 29],
+    // Sam : salaire sur son compte, participation au compte joint, forfait personnel.
+    ['rec-salaire-sam', 'income', 220000, 'acc-sam', null, 'cat-salaire', 'Salaire Sam', 'monthly', 27],
+    ['rec-joint-sam', 'transfer', 95000, 'acc-sam', 'acc-courant', null, 'Participation au compte joint', 'monthly', 28],
+    ['rec-mobile-sam', 'expense', 1599, 'acc-sam', null, 'cat-telecom', 'Forfait mobile Sam', 'monthly', 16],
   ];
+  // Dépenses personnelles réglées depuis le compte joint (à rembourser pour leur part).
+  const personal = { 'rec-sport': 'p1', 'rec-mobile': 'p1', 'rec-mobile-sam': 'p2' };
 
   state.recurring = rules.map(([id, type, amount, accountId, toAccountId, categoryId, description, frequency, day]) => {
     const [y, m] = firstMonth.split('-').map(Number);
     const startDate = `${firstMonth}-${String(Math.min(day, daysInMonth(y, m - 1))).padStart(2, '0')}`;
-    return { id, type, amount, accountId, toAccountId, categoryId, description, frequency, startDate, endDate: null, lastDate: null, autoCreate: true, active: true, tags: [] };
+    return { id, type, amount, accountId, toAccountId, categoryId, description, frequency, startDate, endDate: null, lastDate: null, autoCreate: true, active: true, tags: [], share: personal[id] || null };
   });
   // Une règle à valider manuellement, pour montrer le fonctionnement.
   state.recurring.push({
-    id: 'rec-babysitting',
+    id: 'rec-menage',
     type: 'expense',
     amount: 12000,
     accountId: 'acc-courant',
     toAccountId: null,
-    categoryId: 'cat-enfants',
-    description: 'Baby-sitting',
+    categoryId: 'cat-maison',
+    description: 'Aide ménagère',
     frequency: 'monthly',
     startDate: `${firstMonth}-25`,
     endDate: null,
@@ -123,6 +134,13 @@ export function buildDemoState(today) {
     if (subDay(17) <= today) add({ type: 'expense', amount: 999, date: subDay(17), accountId: 'acc-courant', categoryId: 'cat-abonnements', description: 'PRLV SEPA Presse en ligne' });
     if (subDay(9) <= today) add({ type: 'expense', amount: 899, date: subDay(9), accountId: 'acc-courant', categoryId: 'cat-abonnements', description: 'CB Plateforme vidéo 2' });
     if (subDay(3) <= today) add({ type: 'expense', amount: 299, date: subDay(3), accountId: 'acc-courant', categoryId: 'cat-telecom', description: 'Stockage photos en ligne' });
+    // Sam : courses communes payées avec sa carte, dépenses personnelles.
+    const day2 = () => `${month}-${String(1 + Math.floor(rand2() * lastDay)).padStart(2, '0')}`;
+    for (let i = 0; i < times(2); i++) add({ type: 'expense', amount: between2(35, 95), date: day2(), accountId: 'acc-sam', categoryId: 'cat-courses', description: 'Supermarché', share: 'shared' });
+    if (rand2() < 0.6) add({ type: 'expense', amount: between2(25, 70), date: day2(), accountId: 'acc-sam', categoryId: 'cat-restaurants', description: 'Restaurant en amoureux', share: 'shared' });
+    for (let i = 0; i < times(3); i++) add({ type: 'expense', amount: between2(9, 16), date: day2(), accountId: 'acc-sam', categoryId: 'cat-restaurants', description: 'Déjeuner au travail', share: 'p2' });
+    if (rand2() < 0.5) add({ type: 'expense', amount: between2(25, 90), date: day2(), accountId: 'acc-sam', categoryId: 'cat-shopping', description: pick2(['Vêtements', 'Chaussures', 'Livres']), share: 'p2' });
+    if (rand2() < 0.4) add({ type: 'expense', amount: between2(30, 55), date: day2(), accountId: 'acc-sam', categoryId: 'cat-sport', description: 'Coiffeur', share: 'p2' });
     // Retrait d'espèces
     add({ type: 'transfer', amount: 6000, date: `${month}-${String(Math.min(2, lastDay)).padStart(2, '0')}`, accountId: 'acc-courant', toAccountId: 'acc-especes', categoryId: null, description: 'Retrait distributeur' });
 
@@ -150,11 +168,11 @@ export function buildDemoState(today) {
 
   state.budgets = {
     'cat-logement': { amount: 82000, rollover: false, rolloverSince: null },
-    'cat-courses': { amount: 45000, rollover: false, rolloverSince: null },
+    'cat-courses': { amount: 55000, rollover: false, rolloverSince: null },
     'cat-transport': { amount: 45000, rollover: false, rolloverSince: null },
     'cat-factures': { amount: 11000, rollover: false, rolloverSince: null },
-    'cat-telecom': { amount: 4500, rollover: false, rolloverSince: null },
-    'cat-restaurants': { amount: 15000, rollover: false, rolloverSince: null },
+    'cat-telecom': { amount: 6500, rollover: false, rolloverSince: null },
+    'cat-restaurants': { amount: 20000, rollover: false, rolloverSince: null },
     'cat-loisirs': { amount: 6000, rollover: false, rolloverSince: null },
     'cat-shopping': { amount: 12000, rollover: true, rolloverSince: shiftMonth(thisMonth, -3) },
     'cat-abonnements': { amount: 3000, rollover: false, rolloverSince: null },
@@ -195,6 +213,27 @@ export function buildDemoState(today) {
       createdAt: 3,
     },
   ];
+
+  // Couple : partage au prorata des revenus, un remboursement déjà fait ; bébé attendu dans 5 mois.
+  state.household = {
+    enabled: true,
+    partners: [
+      { id: 'p1', name: 'Alex', income: 285000 },
+      { id: 'p2', name: 'Sam', income: 220000 },
+    ],
+    split: 'income',
+    customShare: 50,
+    settlements: [{ id: 'rgl-demo-1', date: `${shiftMonth(thisMonth, -3)}-02`, from: 'p1', to: 'p2', amount: 15000, note: 'Virement' }],
+  };
+  state.baby = {
+    ...defaultBabyPlan(today),
+    dueDate: addDays(today, 150),
+    count: 1,
+    compare: true,
+    birthParent: 'p2',
+    extraLeaveMonths: { p1: 0, p2: 1 },
+    checklist: { 'siege-auto': { bought: true, actual: 16900 }, poussette: { bought: true, actual: 32000 }, vetements: { bought: true, actual: null } },
+  };
 
   return state;
 }

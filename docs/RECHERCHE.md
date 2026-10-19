@@ -2,7 +2,7 @@
 
 Ce document rassemble la recherche menée pour optimiser Pécule : les repères financiers français utilisés par les conseils, les méthodes reprises des meilleures applications de budget, et les mesures de performance. Pour chaque point : le constat, sa source, et ce qui a été fait dans l'application.
 
-Les valeurs chiffrées sont centralisées dans `js/defaults.js` (`REFERENCE` et `SAVINGS_PRODUCTS`). **Les taux réglementés sont révisés le 1er février et le 1er août de chaque année : c'est le seul fichier à mettre à jour.**
+Les valeurs chiffrées sont centralisées dans `js/defaults.js` (`REFERENCE`, `SAVINGS_PRODUCTS` et, pour la famille, `FAMILY`). **Les taux réglementés sont révisés le 1er février et le 1er août de chaque année : c'est le seul fichier à mettre à jour.**
 
 ## 1. Épargne réglementée (taux au 1er août 2026)
 
@@ -142,9 +142,57 @@ Même script pour les deux versions : Chromium, processeur ralenti 4 fois (tél�
 
 L'ancienne version a été mesurée au commit précédent ; sa page Optimisation n'existait pas. Avec ce volume, l'ancienne version approchait aussi de la limite de 5 Mo de `localStorage` : une copie supplémentaire des données échouait déjà.
 
-## 10. Limites
+## 10. Famille : budget à deux et arrivée d'un bébé
+
+Les barèmes sont regroupés dans `js/defaults.js` (`FAMILY`, `BABY_EQUIPMENT`, `BABY_MONTHLY`) et les calculs dans `js/family.js` (fonctions pures, testées). Montants en vigueur au 1er avril 2026 pour la CAF.
+
+### Partager les dépenses en couple
+
+| Constat | Source | Dans l'application |
+|---|---|---|
+| En France, 36 % des personnes en couple partagent à 50/50 et 24 % au prorata des revenus. Avec des revenus différents, le 50/50 pèse davantage sur celui qui gagne le moins et l'empêche d'épargner. | [Pretto](https://www.pretto.fr/acheteur-immobilier/co-emprunteur/repartition-depenses-en-couple/), [SG](https://particuliers.sg.fr/nos-conseils/epargner/comment-epargner-en-couple) | Trois règles : prorata des revenus (par défaut), 50/50, pourcentage choisi. Conseil « Partager au prorata ? » quand la règle 50/50 s'applique à des revenus qui diffèrent d'au moins 30 %. |
+| Les guides proposent souvent un compte joint alimenté par chacun selon sa part, plus un compte personnel chacun. | Mêmes sources | Chaque compte a un titulaire (commun ou l'un des deux). Chaque dépense est « commune » ou personnelle ; par défaut, commune sur le compte joint et pour les besoins du foyer. |
+
+**Calcul de l'équilibre.** Le compte joint est supposé alimenté selon la règle de partage. Une dépense commune payée avec un compte personnel est due par l'autre pour sa part. Une dépense personnelle payée par le compte joint est due par son bénéficiaire pour la part de l'autre. Les remboursements enregistrés remettent le compteur à zéro.
+
+**Prévision du budget commun sur 12 mois.** Base : moyenne des dépenses communes des 3 derniers mois. On y ajoute le coût net de bébé. Au prorata, la part de chacun est recalculée les mois où un congé réduit ses revenus.
+
+### Congés liés à la naissance
+
+| Règle 2026 | Source | Dans l'application |
+|---|---|---|
+| Congé maternité : 16 semaines (6 avant, 10 après) ; 26 semaines à partir du 3e enfant ; **34 semaines pour des jumeaux** (12 + 22) | [service-public.fr](https://www.service-public.gouv.fr/particuliers/vosdroits/F35890) | Dates calculées depuis le terme prévu. |
+| Congé de paternité et d'accueil : 25 jours, **32 jours en cas de naissances multiples** | [info.gouv.fr](https://www.info.gouv.fr/actualite/conge-de-paternite-et-d-accueil-de-l-enfant-regles-demarches-et-evolutions-recentes) | Placé à partir de la naissance. |
+| Indemnités journalières : salaire journalier de base (3 derniers salaires bruts ÷ 91,25) moins 21 %, plafonnées à 104,02 € par jour | [L'Essentiel de l'éco](https://lessentieldeleco.fr/6006-conge-maternite-2026-quel-montant-pouvez-vous-vraiment-toucher/) | Perte de revenus = salaire net − indemnités, sauf si l'employeur maintient le salaire (case à cocher). |
+| Congé supplémentaire de naissance : 1 ou 2 mois par parent, indemnisé 70 % du salaire net le 1er mois et 60 % le 2e, dans la limite du plafond de la Sécurité sociale | [ameli.fr](https://www.ameli.fr/assure/droits-demarches/famille/maternite-paternite-adoption/conge-supplementaire-naissance), [FED Group](https://www.fed-group.fr/fed-group/actualites-fed/conge-naissance-reforme-2026) | 0, 1 ou 2 mois par parent, à la suite du congé maternité ou paternité. |
+
+### Aides et fiscalité
+
+| Aide | Source | Dans l'application |
+|---|---|---|
+| Prime à la naissance : 1 093,11 €, versée avant la naissance, **pour chaque enfant** | [aide-sociale.fr](https://www.aide-sociale.fr/caf-paje/), [justice.fr](https://www.justice.fr/fiche/allocation-base-paje-versee-naissance-enfant) | Versée au 7e mois de grossesse si le revenu de 2024 est sous le plafond. |
+| Allocation de base : 198,17 € (taux plein) ou 99,09 € (taux partiel) par mois jusqu'aux 3 ans. En cas de naissances multiples, une allocation par enfant. | [justice.fr](https://www.justice.fr/fiche/allocation-base-paje-versee-naissance-enfant), [Assemblée nationale, QE 43894](https://questions.assemblee-nationale.fr/dyn/13/questions/QANR5L13QE43894.pdf) | Taux selon le revenu fiscal de référence 2024 et les plafonds (1 ou 2 revenus, majorés par enfant). |
+| Allocations familiales dès 2 enfants : 152,25 €, 76,13 € ou 38,06 € par mois selon les revenus | [caf.fr](https://www.caf.fr/professionnels/offres-et-services/accompagnement-des-allocataires/bareme-allocations-familiales) | Comptées dès 2 enfants à charge (donc pour des jumeaux dès leur naissance). |
+| Crèche : tarif horaire = ressources mensuelles × taux d'effort (0,0619 % pour 1 enfant, 0,0516 % pour 2…), entre un plancher et un plafond de ressources | [CAF, guide PSU 2026](https://caf.fr/sites/default/files/medias/493/Partenaires/Petite-enfance/EAJE/Guide_PSU_2026_02_V_Def.pdf) | Coût mensuel = tarif × heures × nombre de bébés. |
+| Assistante maternelle : depuis septembre 2025, le complément de mode de garde (CMG) est calculé à l'heure, comme en crèche, dans la limite de 825,16 € par mois | [quelles-aides.fr](https://www.quelles-aides.fr/allocations-familiales/naissance/cmg/), [aide-sociale.fr](https://www.aide-sociale.fr/cmg-assistante-maternelle/), [Fepem](https://observatoire.fepem.fr/app/uploads/2025/12/Barometre-48_VF.pdf), [DREETS](https://pays-de-la-loire.dreets.gouv.fr/sites/pays-de-la-loire.dreets.gouv.fr/IMG/pdf/fiche_remu_indemnites_frais_au_12062026.pdf) | Estimation simplifiée : la famille paie l'équivalent du tarif crèche, le CMG couvre le reste jusqu'à 8 € de l'heure. |
+| Crédit d'impôt pour frais de garde : 50 % des frais restant à charge, plafond 3 500 € par enfant de moins de 6 ans | [Meilleurtaux](https://placement.meilleurtaux.com/placement-financier/actualites/2026-mars/frais-de-garde-le-credit-dimpot-jusqua-1-750-eur.html) | Affiché par an, versé l'année suivante. |
+| Quotient familial : une demi-part par enfant pour les deux premiers, une part à partir du 3e ; avantage plafonné à 1 807 € par demi-part | [Légifiscal](https://www.legifiscal.fr/actualites-fiscales/4474-ir-bareme-2026-quotient-familial-decote.html) | Avantage maximal indiqué. |
+
+### Dépenses d'un bébé
+
+La première année d'un enfant coûte en moyenne 6 172 € selon le baromètre Sofinscope. La liste de départ de Pécule totalise environ 2 000 € neuf pour un bébé. Sources : [Journal de l'économie](https://www.journaldeleconomie.fr/un-enfant-6-172-euros-premiere-annee/), [Avis Parents](https://www.avis-parents.com/vie-famille/budget-famille/cout-bebe-premiere-annee/).
+
+**Dans l'application.**
+- Liste d'achats de 16 articles, avec prix courants et quantités pour des jumeaux (2 sièges auto, poussette double…). L'occasion réduit le prix, sauf pour le siège auto.
+- Dépenses mensuelles par enfant selon les choix (couches jetables ou lavables, allaitement ou lait infantile), plus la diversification à partir de 6 mois.
+- **Comparaison 1 bébé / jumeaux** tant que le nombre n'est pas confirmé.
+- **Somme à mettre de côté** : le besoin de trésorerie le plus élevé entre aujourd'hui et la reprise du travail. Il comprend les achats, les dépenses courantes et la baisse de revenus, aides déduites. Après la reprise, le coût relève du budget mensuel.
+- Boutons pour créer l'objectif d'épargne, les récurrences (aides de la CAF, frais de garde) et le budget « Enfants ». Le budget est proposé un mois avant la naissance, pour ne pas rester inutilisé.
+
+## 11. Limites
 
 - Les conseils sont indicatifs et ne remplacent pas un conseiller financier.
 - Les taux et plafonds sont datés (`REFERENCE.ratesDate`) et doivent être mis à jour à chaque révision.
 - La prévision de trésorerie ignore par défaut les revenus variables (case à cocher pour les inclure).
 - La détection d'abonnements ne voit que ce qui passe par vos comptes : un abonnement payé via un magasin d'applications apparaît sous le nom du magasin.
+- Les droits aux aides familiales sont des estimations : seule la CAF les calcule (situation, ressources exactes, date de déclaration de grossesse). Le revenu fiscal de référence est estimé à 90 % des revenus nets annuels s'il n'est pas saisi. Le CMG et la PreParE sont simplifiés ou non calculés.

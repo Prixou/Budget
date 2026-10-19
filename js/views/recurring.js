@@ -1,7 +1,7 @@
 // Opérations récurrentes : salaire, loyer, abonnements, virements d'épargne.
 import { FREQUENCIES, dueOccurrences, monthlyEquivalent, nextOccurrence, occurrencesBetween, upcoming } from '../calc.js';
 import { catBadge, kpi, lookups, transferBadge } from '../components.js';
-import { amountField } from '../forms.js';
+import { amountField, bindShareField, defaultShare, shareField } from '../forms.js';
 import { confirmOccurrence, deleteRecurring, processRecurring, saveRecurring, skipOccurrence, store } from '../store.js';
 import { accountOptions, categoryOptions, confirmDialog, emptyState, fieldError, formValues, icon, openModal, options, toast } from '../ui.js';
 import { addDays, formatDate, formatMoney, html, isValidISODate, parseAmount, pluralize, raw, sum, todayISO } from '../utils.js';
@@ -58,6 +58,7 @@ export function openRecurringForm(rule = null) {
         <label class="field"><span>Dernière échéance <span class="muted">(facultatif)</span></span><input class="input" type="date" name="endDate" id="r-end" value="${v.endDate || ''}"></label>
       </div>
       ${editing ? '' : html`<label class="check" id="r-backfill-wrap" hidden><input type="checkbox" name="backfill" id="r-backfill"><span>Créer aussi les échéances déjà passées</span></label>`}
+      ${shareField(state, v.share || defaultShare(state, v.accountId, v.categoryId))}
       <label class="check"><input type="checkbox" name="autoCreate" id="r-auto" ${v.autoCreate ? raw('checked') : ''}><span>Enregistrer automatiquement à chaque échéance <span class="muted">(sinon, vous validez chaque échéance depuis le tableau de bord)</span></span></label>
       ${editing ? html`<label class="check"><input type="checkbox" name="active" id="r-active" ${v.active ? raw('checked') : ''}><span>Active</span></label>` : ''}
     </form>`,
@@ -79,6 +80,7 @@ export function openRecurringForm(rule = null) {
       };
       applyType();
       form.querySelectorAll('input[name=type]').forEach((r) => r.addEventListener('change', applyType));
+      bindShareField(form, store.state);
       const backfill = el.querySelector('#r-backfill-wrap');
       const updateBackfill = () => {
         if (backfill) backfill.hidden = !(form.elements.startDate.value && form.elements.startDate.value < todayISO());
@@ -109,6 +111,7 @@ export function openRecurringForm(rule = null) {
           autoCreate: f.autoCreate,
           active: editing ? f.active : true,
           tags: rule?.tags || [],
+          share: f.type === 'expense' && f.share ? f.share : rule?.share ?? null,
           lastDate: rule?.lastDate ?? null,
         };
         if (!editing && !f.backfill && f.startDate < todayISO()) {

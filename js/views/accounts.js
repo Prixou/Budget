@@ -43,6 +43,16 @@ export function openAccountForm(account = null) {
         { placeholder: 'Non précisé' },
       )}</select><span class="hint">Permet de connaître le taux et le plafond, et d'affiner les conseils. Taux au ${formatDate(REFERENCE.ratesDate)}.</span></label>
       ${amountField({ name: 'initialBalance', label: 'Solde initial', value: v.initialBalance, required: false, hint: 'Solde du compte avant la première opération saisie. Peut être négatif.' })}
+      ${store.state.household?.enabled
+        ? html`<label class="field"><span>Titulaire</span><select class="select" name="owner" id="a-owner">${options(
+            [
+              { value: 'joint', label: 'Compte commun' },
+              { value: 'p1', label: `${store.state.household.partners[0].name} (personnel)` },
+              { value: 'p2', label: `${store.state.household.partners[1].name} (personnel)` },
+            ],
+            v.owner || 'joint',
+          )}</select><span class="hint">Sert à savoir qui a payé une dépense commune.</span></label>`
+        : ''}
       <label class="check"><input type="checkbox" name="includeInTotal" id="a-include" ${v.includeInTotal !== false ? raw('checked') : ''}><span>Inclure dans le solde total</span></label>
       ${editing ? html`<label class="check"><input type="checkbox" name="archived" id="a-archived" ${v.archived ? raw('checked') : ''}><span>Compte clôturé (masqué des listes)</span></label>` : ''}
     </form>`,
@@ -65,6 +75,7 @@ export function openAccountForm(account = null) {
           name: values.name.trim(),
           type: values.type,
           product: values.type === 'epargne' ? values.product || null : null,
+          owner: values.owner || account?.owner || 'joint',
           initialBalance: initial,
           includeInTotal: values.includeInTotal,
           archived: !!values.archived,
@@ -187,7 +198,7 @@ export default {
           <span class="acct-icon">${icon(ACCOUNT_TYPES[a.type]?.icon || 'wallet', { size: 20 })}</span>
           <div class="grow">
             <h3>${a.name}</h3>
-            <p class="muted small">${product ? product.label : ACCOUNT_TYPES[a.type]?.label || 'Compte'}${a.includeInTotal === false ? ' · hors total' : ''}${a.archived ? ' · clôturé' : ''}</p>
+            <p class="muted small">${product ? product.label : ACCOUNT_TYPES[a.type]?.label || 'Compte'}${state.household?.enabled ? ` · ${a.owner === 'p1' || a.owner === 'p2' ? state.household.partners[a.owner === 'p1' ? 0 : 1].name : 'commun'}` : ''}${a.includeInTotal === false ? ' · hors total' : ''}${a.archived ? ' · clôturé' : ''}</p>
           </div>
           <button type="button" class="icon-btn icon-btn-sm" data-edit-account="${a.id}" aria-label="Modifier ${a.name}">${icon('edit', { size: 16 })}</button>
         </div>

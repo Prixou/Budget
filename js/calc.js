@@ -598,6 +598,7 @@ export function transactionFromRule(rule, date) {
     tags: [...(rule.tags || [])],
     cleared: false,
     recurringId: rule.id,
+    share: rule.type === 'expense' ? rule.share ?? null : null,
   };
 }
 

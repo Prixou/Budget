@@ -25,6 +25,59 @@ export function amountField({ name = 'amount', label = 'Montant', value = null, 
   </label>`;
 }
 
+/* ------------------------------------------------------------------ */
+/* Couple : « pour qui » est la dépense                                */
+/* ------------------------------------------------------------------ */
+
+/** Part proposée par défaut : commune sur un compte commun ou pour un besoin du foyer, sinon personnelle. */
+export function defaultShare(state, accountId, categoryId) {
+  const owner = state.accounts.find((a) => a.id === accountId)?.owner;
+  if (owner !== 'p1' && owner !== 'p2') return 'shared';
+  const cat = state.categories.find((c) => c.id === categoryId);
+  return cat?.group === 'needs' || cat?.id === 'cat-enfants' ? 'shared' : owner;
+}
+
+/** Sélecteur « Pour qui ? » (affiché seulement si le mode couple est activé). */
+export function shareField(state, value, { show = 'expense' } = {}) {
+  const h = state.household;
+  if (!h?.enabled) return '';
+  const choices = [
+    ['shared', 'Commun'],
+    ['p1', h.partners[0].name],
+    ['p2', h.partners[1].name],
+  ];
+  return html`<div class="field" data-show="${show}">
+    <span class="label">Pour qui ?</span>
+    <div class="segmented" role="radiogroup" aria-label="Pour qui est cette dépense">
+      ${choices.map(([v, label]) => html`<label><input type="radio" name="share" value="${v}" ${value === v ? raw('checked') : ''}><span>${label}</span></label>`)}
+    </div>
+    <span class="hint" data-payer></span>
+  </div>`;
+}
+
+/** Met à jour la part par défaut et l'indication « payé par » quand le compte ou la catégorie change. */
+export function bindShareField(form, state) {
+  if (!form.querySelector('input[name=share]')) return () => {};
+  let touched = false;
+  const payerHint = form.querySelector('[data-payer]');
+  const update = (reset) => {
+    const accountId = form.elements.accountId.value;
+    const owner = state.accounts.find((a) => a.id === accountId)?.owner;
+    const h = state.household;
+    payerHint.textContent = owner === 'p1' || owner === 'p2' ? `Payé par ${h.partners[owner === 'p1' ? 0 : 1].name} (compte personnel)` : 'Payé par le compte commun';
+    if (reset && !touched) {
+      const share = defaultShare(state, accountId, form.elements.categoryId?.value);
+      const radio = form.querySelector(`input[name=share][value="${share}"]`);
+      if (radio) radio.checked = true;
+    }
+  };
+  form.querySelectorAll('input[name=share]').forEach((r) => r.addEventListener('change', () => (touched = true)));
+  form.elements.accountId.addEventListener('change', () => update(true));
+  form.elements.categoryId?.addEventListener('change', () => update(true));
+  update(false);
+  return update;
+}
+
 /**
  * Ouvre le formulaire d'opération.
  * tx : opération existante (modification) ; defaults : valeurs initiales pour une nouvelle.
@@ -91,6 +144,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
         <select class="select" name="toAccountId" id="f-toAccountId">${accountOptions(accounts, v.toAccountId, { placeholder: 'Choisir…' })}</select>
       </label>
     </div>
+    ${shareField(state, v.share || defaultShare(state, v.accountId, v.categoryId))}
     <label class="field">
       <span>Étiquettes</span>
       <input class="input" name="tags" id="f-tags" autocomplete="off" placeholder="vacances, travail… (séparées par des virgules)" value="${(v.tags || []).join(', ')}">
@@ -144,6 +198,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
       catSelect.addEventListener('change', () => {
         categoryTouched = true;
       });
+      const refreshShare = bindShareField(form, store.state);
 
       // Libellé déjà connu : on propose la même catégorie et le même compte.
       form.elements.description.addEventListener('change', () => {
@@ -154,6 +209,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
         applyType();
         if (known.categoryId) catSelect.value = known.categoryId;
         if (known.accountId && [...form.elements.accountId.options].some((o) => o.value === known.accountId)) form.elements.accountId.value = known.accountId;
+        refreshShare(true);
       });
 
       const repeat = form.elements.repeat;
@@ -186,6 +242,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
             .map((t) => t.trim().replace(/^#/, ''))
             .filter(Boolean),
           cleared: values.cleared,
+          share: values.type === 'expense' && values.share ? values.share : tx?.share ?? null,
         };
         if (values.repeat) {
           const rule = saveRecurring({
@@ -202,6 +259,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
             autoCreate: true,
             active: true,
             tags: data.tags,
+            share: data.share,
           });
           if (data.date <= todayISO()) saveTransaction({ ...data, recurringId: rule.id });
           // Rattrape les échéances passées si la date de départ est ancienne.

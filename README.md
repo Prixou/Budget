@@ -4,11 +4,12 @@ Application web complète pour gérer son budget : suivi des dépenses et des re
 
 - **Aucune dépendance** : HTML, CSS et JavaScript natifs (modules ES). Pas de compilation.
 - **Vos données restent chez vous** : tout est enregistré dans le navigateur (IndexedDB), rien n'est envoyé sur un serveur.
+- **En couple et en famille** : partage des dépenses communes, équilibre entre vous deux, et plan pour l'arrivée d'un bébé ou de jumeaux (congés, aides de la CAF, garde, achats).
 - **Des conseils chiffrés** : score de santé financière, abonnements oubliés, argent qui dort, prévision de trésorerie, stratégies de remboursement. Ils s'appuient sur les taux et règles en vigueur en France en 2026 (voir [docs/RECHERCHE.md](docs/RECHERCHE.md)).
 - **Hors ligne et installable** : application web progressive (PWA), utilisable sur ordinateur et sur mobile.
 - **En français**, avec les usages français : montants au format `1 234,56 €`, relevés bancaires CSV avec `;`, taux d'endettement de 35 %, pointage des opérations.
 
-À la première ouverture, un jeu de **données d'exemple** (8 mois d'historique) est chargé pour découvrir l'application. Le bouton « Commencer avec mes données » les efface et crée votre premier compte.
+À la première ouverture, un jeu de **données d'exemple** (8 mois d'historique d'un couple qui attend un bébé) est chargé pour découvrir l'application. Le bouton « Commencer avec mes données » les efface et crée votre premier compte.
 
 ## Fonctionnalités
 
@@ -21,6 +22,8 @@ Application web complète pour gérer son budget : suivi des dépenses et des re
 | **Récurrences** | Salaire, loyer, abonnements, virements d'épargne… de quotidien à annuel, avec date de fin facultative. Enregistrement automatique à l'échéance ou validation manuelle. Charges fixes mensuelles, coût annuel des abonnements, calendrier des 45 prochains jours, mise en pause. |
 | **Objectifs d'épargne** | Montant visé, échéance, versements et retraits. Effort mensuel nécessaire, date d'atteinte estimée au rythme actuel. |
 | **Crédits** | Suivi des prêts (immobilier, auto, consommation…) : mensualité, capital restant dû, intérêts payés et restants, coût total, tableau d'amortissement, taux d'endettement. Comparaison des stratégies « avalanche » et « boule de neige » avec un effort mensuel supplémentaire. |
+| **Couple** | Prénoms, revenus et règle de partage (au prorata des revenus, 50/50 ou pourcentage choisi). Chaque compte a un titulaire (commun ou personnel) et chaque dépense est « commune » ou pour l'un de vous. Équilibre « qui doit combien à qui », remboursements, part de chacun dans les dépenses communes, budget commun prévu sur 12 mois avec le versement et le « reste pour soi » de chacun, y compris pendant les congés liés à la naissance. Filtre « Pour qui » dans les opérations. |
+| **Bébé** | Plan d'arrivée d'un bébé ou de jumeaux, avec comparaison des deux tant que ce n'est pas confirmé : somme à mettre de côté avant la naissance, coût net de la première année, calendrier (congés maternité, paternité et de naissance, prime, début de la garde), projection mois par mois, baisse de revenus pendant les congés, aides de la CAF (prime, allocation de base, allocations familiales, CMG), crédit d'impôt, crèche ou assistante maternelle, liste d'achats à cocher. Un clic crée l'objectif d'épargne, les récurrences et le budget « Enfants ». Règles et barèmes 2026. |
 | **Optimisation** | Score de santé financière sur 100 (4 piliers inspirés du FinHealth Score : dépenser, épargner, emprunter, planifier). Conseils classés par priorité avec le gain annuel estimé et une action en un clic, par exemple : argent qui dort sur le compte courant (gain sur Livret A ou LEP, perte due à l'inflation), épargne de précaution, frais bancaires, abonnements, hausses de dépenses, dépenses inhabituelles, budgets irréalistes, épargne automatique, remboursement anticipé, renégociation, assurance emprunteur. Prévision de trésorerie sur 90 jours avec point bas, « disponible à dépenser » d'ici la fin du mois, détection automatique des paiements récurrents non suivis. |
 | **Rapports** | Toute période (mois, trimestre, année, personnalisée) et tout compte : revenus / dépenses par mois, solde mensuel (excédent ou déficit), évolution du solde, répartition par catégorie avec évolution par rapport à la période précédente, règle 50/30/20, plus grosses dépenses, étiquettes, tableau mensuel. Export CSV. |
 | **Simulateurs** | Prêt (mensualité, coût, assurance, amortissement), remboursement anticipé (indemnités légales, intérêts économisés, comparaison avec un Livret A), capacité d'emprunt (35 % d'endettement), épargne à intérêts composés (taux 2026 en un clic, inflation), objectif d'épargne, règle 50/30/20 comparée à vos dépenses réelles, fonds d'urgence. Préremplis avec vos propres moyennes. |
@@ -68,6 +71,7 @@ js/app.js               démarrage, navigation, raccourcis
 js/store.js             état, persistance, actions (ajout, suppression, annulation…)
 js/calc.js              calculs purs : soldes, budgets, récurrences, crédits, épargne (avec cache)
 js/insights.js          moteur d'optimisation : score, conseils, prévision, détection, stratégies
+js/family.js            couple (partage, équilibre, prévision) et plan bébé (congés, aides, garde)
 js/csv.js               lecture / écriture CSV, import de relevés
 js/charts.js            graphiques SVG et info-bulles
 js/views/*.js           une vue par rubrique
@@ -84,4 +88,4 @@ npm test             # tests unitaires (Node 18 ou plus récent)
 
 Lors de l'ajout d'un fichier JavaScript, ajoutez-le à la liste `ASSETS` de `sw.js` et en `modulepreload` dans `index.html` (des tests le vérifient). La version du service worker est remplacée à chaque déploiement par l'identifiant du commit : les utilisateurs se voient proposer la mise à jour.
 
-Les taux d'épargne et repères économiques se mettent à jour dans `js/defaults.js` (`REFERENCE`, `SAVINGS_PRODUCTS`), à chaque révision du 1er février et du 1er août.
+Les taux d'épargne et repères économiques se mettent à jour dans `js/defaults.js` (`REFERENCE`, `SAVINGS_PRODUCTS`), à chaque révision du 1er février et du 1er août. Les barèmes familiaux (`FAMILY`) changent au 1er avril (CAF) et au 1er janvier (Sécurité sociale, impôts).

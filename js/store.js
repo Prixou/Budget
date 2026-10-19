@@ -1,6 +1,6 @@
 // État de l'application, persistance et actions de modification.
 import { dueOccurrences, invalidateDerived, transactionFromRule, accountBalance } from './calc.js';
-import { emptyState, defaultCategories } from './defaults.js';
+import { defaultBabyPlan, defaultCategories, emptyHousehold, emptyState } from './defaults.js';
 import { buildDemoState } from './demo.js';
 import { todayISO, uid, monthKey } from './utils.js';
 
@@ -149,6 +149,8 @@ function snapshotOf(state) {
     recurring: structuredClone(state.recurring),
     goals: structuredClone(state.goals),
     debts: structuredClone(state.debts),
+    household: structuredClone(state.household),
+    baby: structuredClone(state.baby),
   };
 }
 
@@ -172,6 +174,40 @@ function validDate(iso) {
   return d <= (m === 2 && leap ? 29 : MONTH_DAYS[m - 1]);
 }
 
+function normalizeHousehold(input) {
+  const base = emptyHousehold();
+  if (!input || typeof input !== 'object') return base;
+  const partners = base.partners.map((p, i) => {
+    const src = Array.isArray(input.partners) ? input.partners[i] || {} : {};
+    return { id: p.id, name: String(src.name || p.name).slice(0, 40), income: Math.max(0, toInt(src.income)) };
+  });
+  return {
+    enabled: !!input.enabled,
+    partners,
+    split: ['income', 'equal', 'custom'].includes(input.split) ? input.split : 'income',
+    customShare: Math.min(100, Math.max(0, Number(input.customShare) || 50)),
+    settlements: Array.isArray(input.settlements)
+      ? input.settlements.filter((s) => s && s.id && validDate(s.date) && ['p1', 'p2'].includes(s.from)).map((s) => ({ ...s, amount: Math.abs(toInt(s.amount)), to: s.from === 'p1' ? 'p2' : 'p1' }))
+      : [],
+  };
+}
+
+function normalizeBaby(input) {
+  const base = defaultBabyPlan(null);
+  return {
+    ...base,
+    ...input,
+    dueDate: validDate(input.dueDate) ? input.dueDate : null,
+    count: input.count === 2 ? 2 : 1,
+    existingChildren: Math.max(0, Math.min(10, toInt(input.existingChildren))),
+    birthParent: input.birthParent === 'p2' ? 'p2' : 'p1',
+    grossSalaries: { ...base.grossSalaries, ...(input.grossSalaries || {}) },
+    salaryMaintained: { ...base.salaryMaintained, ...(input.salaryMaintained || {}) },
+    extraLeaveMonths: { ...base.extraLeaveMonths, ...(input.extraLeaveMonths || {}) },
+    checklist: input.checklist && typeof input.checklist === 'object' ? input.checklist : {},
+  };
+}
+
 function toInt(v, fallback = 0) {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? n : fallback;
@@ -192,6 +228,8 @@ export function normalizeState(input) {
     recurring: Array.isArray(input.recurring) ? input.recurring : [],
     goals: Array.isArray(input.goals) ? input.goals : [],
     debts: Array.isArray(input.debts) ? input.debts : [],
+    household: normalizeHousehold(input.household),
+    baby: input.baby && typeof input.baby === 'object' ? normalizeBaby(input.baby) : null,
   };
 
   state.accounts = state.accounts
@@ -658,6 +696,48 @@ export function saveDebt(debt) {
 export function deleteDebt(id) {
   store.commit((s) => {
     s.debts = s.debts.filter((d) => d.id !== id);
+  }, { snapshot: true });
+}
+
+// Couple
+
+export function updateHousehold(patch) {
+  store.commit((s) => {
+    s.household = { ...s.household, ...patch };
+  });
+}
+
+export function addSettlement({ from, amount, date, note = '' }) {
+  store.commit((s) => {
+    s.household.settlements = [...s.household.settlements, { id: uid('rgl-'), from, to: from === 'p1' ? 'p2' : 'p1', amount, date, note }];
+  });
+}
+
+export function deleteSettlement(id) {
+  store.commit((s) => {
+    s.household.settlements = s.household.settlements.filter((x) => x.id !== id);
+  }, { snapshot: true });
+}
+
+// Projet bébé
+
+export function saveBabyPlan(patch) {
+  store.commit((s) => {
+    s.baby = { ...(s.baby || defaultBabyPlan(todayISO())), ...patch, enabled: true };
+  });
+}
+
+export function setBabyItem(itemId, patch) {
+  store.commit((s) => {
+    const list = { ...(s.baby?.checklist || {}) };
+    list[itemId] = { ...(list[itemId] || {}), ...patch };
+    s.baby = { ...s.baby, checklist: list };
+  });
+}
+
+export function deleteBabyPlan() {
+  store.commit((s) => {
+    s.baby = null;
   }, { snapshot: true });
 }
 

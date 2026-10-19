@@ -53,6 +53,68 @@ export const CATEGORY_GROUPS = {
   savings: { label: 'Épargne', hint: 'Épargne, investissements, remboursements anticipés', target: 0.2 },
 };
 
+/**
+ * Repères « famille » 2026 (montants en centimes, au 1er avril 2026 sauf mention).
+ * Sources : barèmes CAF, service-public.fr, ameli.fr, info.gouv.fr, Code de la sécurité sociale.
+ * Détail et liens dans docs/RECHERCHE.md. À revoir chaque 1er avril (revalorisation CAF).
+ */
+export const FAMILY = {
+  date: '2026-04-01',
+  birthPremium: 109311, // prime à la naissance, par enfant, versée au 7e mois de grossesse
+  baseAllowanceFull: 19817, // allocation de base PAJE, taux plein, par mois
+  baseAllowancePartial: 9909, // taux partiel
+  // Plafonds de revenu fiscal de référence 2024, pour un premier enfant (majorés par enfant supplémentaire)
+  ceilingPartial: { one: 3711800, two: 4905400, step: 890800 },
+  ceilingFull: { one: 3106600, two: 4105500, step: 745500 },
+  familyAllowance: {
+    two: [15225, 7613, 3806], // 2 enfants, selon les 3 tranches de ressources
+    three: [34732, 17366, 8683],
+    extra: [19507, 9753, 4877], // par enfant au-delà de 3
+    ceilings: [7998000, 10660400], // pour 2 enfants
+    step: 666400, // par enfant supplémentaire
+  },
+  maternityWeeks: { first: [6, 10], third: [8, 18], twins: [12, 22] }, // [avant, après] la naissance
+  paternityDays: { single: 25, multiple: 32 },
+  dailyAllowanceMax: 10402, // indemnité journalière maximale (maternité, paternité), 2026
+  dailyAllowanceRate: 0.79, // 79 % du salaire journalier de base (3 derniers salaires bruts / 91,25)
+  birthLeave: { first: 0.7, second: 0.6, cap: 400500 }, // congé supplémentaire de naissance (depuis le 1er juillet 2026)
+  psu: { floor: 81462, ceiling: 850000, rates: [0.000619, 0.000516, 0.000413, 0.00031] }, // crèche : taux d'effort horaire
+  cmg: { hourlyCap: 800, monthlyMax: 82516 }, // complément de mode de garde, assistante maternelle
+  childcareCredit: { rate: 0.5, cap: 350000 }, // crédit d'impôt garde (enfant de moins de 6 ans), par enfant et par an
+  quotientCap: 180700, // avantage maximal par demi-part de quotient familial (revenus 2025)
+};
+
+/** Liste d'équipement de départ. price : prix neuf courant (centimes) ; twins : quantité pour des jumeaux. */
+export const BABY_EQUIPMENT = [
+  { id: 'siege-auto', label: 'Siège auto / coque', price: 18000, twins: 2, usedOk: false, note: 'à acheter neuf (sécurité)' },
+  { id: 'poussette', label: 'Poussette', price: 45000, twins: 1.65, usedOk: true, twinsNote: 'poussette double' },
+  { id: 'lit', label: 'Lit et matelas', price: 22000, twins: 2, usedOk: true, note: 'matelas neuf conseillé' },
+  { id: 'berceau', label: 'Berceau ou couffin', price: 12000, twins: 2, usedOk: true },
+  { id: 'langer', label: 'Table ou matelas à langer', price: 9000, twins: 1, usedOk: true },
+  { id: 'bain', label: 'Baignoire et accessoires de bain', price: 4000, twins: 1, usedOk: true },
+  { id: 'porte-bebe', label: 'Porte-bébé ou écharpe', price: 7000, twins: 1.5, usedOk: true },
+  { id: 'transat', label: 'Transat', price: 6000, twins: 2, usedOk: true },
+  { id: 'chaise-haute', label: 'Chaise haute', price: 12000, twins: 2, usedOk: true },
+  { id: 'babyphone', label: 'Babyphone', price: 6000, twins: 1, usedOk: true },
+  { id: 'repas', label: 'Biberons, stérilisateur, chauffe-biberon', price: 9000, twins: 1.5, usedOk: true },
+  { id: 'gigoteuses', label: 'Gigoteuses', price: 8000, twins: 2, usedOk: true },
+  { id: 'vetements', label: 'Vêtements 0-6 mois', price: 25000, twins: 2, usedOk: true },
+  { id: 'linge', label: 'Linge (draps, langes, serviettes)', price: 8000, twins: 1.6, usedOk: true },
+  { id: 'soins', label: 'Soins et pharmacie (thermomètre, mouche-bébé…)', price: 6000, twins: 1.2, usedOk: false },
+  { id: 'sac', label: 'Sac à langer', price: 5000, twins: 1, usedOk: true },
+];
+
+/** Dépenses mensuelles par enfant la première année (centimes). */
+export const BABY_MONTHLY = {
+  diapers: { store: 5500, brand: 9000, washable: 1500 }, // lavables : lessive (le kit est compté à part)
+  washableKit: 40000,
+  feeding: { breast: 0, mixed: 5000, formula: 10000 },
+  hygiene: 2500,
+  clothes: 3000,
+  health: 1500,
+  food: 4000, // diversification alimentaire à partir de 6 mois
+};
+
 export const DEBT_KINDS = {
   immobilier: 'Crédit immobilier',
   auto: 'Crédit auto',
@@ -127,6 +189,42 @@ export function defaultCategories() {
   ];
 }
 
+export function emptyHousehold() {
+  return {
+    enabled: false,
+    partners: [
+      { id: 'p1', name: 'Moi', income: 0 },
+      { id: 'p2', name: 'Mon conjoint', income: 0 },
+    ],
+    split: 'income', // 'income' (au prorata des revenus), 'equal' (50/50) ou 'custom'
+    customShare: 50, // part de p1 en % si split = 'custom'
+    settlements: [],
+  };
+}
+
+export function defaultBabyPlan(today) {
+  return {
+    enabled: true,
+    dueDate: null,
+    count: 1,
+    compare: true,
+    existingChildren: 0,
+    birthParent: 'p1',
+    grossSalaries: { p1: null, p2: null },
+    salaryMaintained: { p1: false, p2: false },
+    extraLeaveMonths: { p1: 0, p2: 0 },
+    childcare: 'creche',
+    hoursPerWeek: 40,
+    assmatHourly: 550,
+    feeding: 'mixed',
+    diapers: 'store',
+    equipmentLevel: 'mixed',
+    taxIncome: null,
+    checklist: {},
+    createdAt: today,
+  };
+}
+
 export function emptyState() {
   return {
     version: 1,
@@ -145,6 +243,8 @@ export function emptyState() {
       dismissedTips: [],
       ignoredRecurring: [],
     },
+    household: emptyHousehold(),
+    baby: null,
     accounts: [],
     categories: defaultCategories(),
     transactions: [],

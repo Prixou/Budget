@@ -27,7 +27,16 @@ export function lookups(state) {
   return {
     cat: new Map(state.categories.map((c) => [c.id, c])),
     acc: new Map(state.accounts.map((a) => [a.id, a])),
+    household: state.household?.enabled ? state.household : null,
   };
+}
+
+/** Pour qui est la dépense (mode couple) : « Commun » ou le prénom. */
+function shareLabel(tx, maps) {
+  if (!maps.household || tx.type !== 'expense') return '';
+  const owner = maps.acc.get(tx.accountId)?.owner;
+  const share = tx.share || (owner === 'p1' || owner === 'p2' ? owner : 'shared');
+  return share === 'shared' ? 'Commun' : maps.household.partners[share === 'p1' ? 0 : 1].name;
 }
 
 export function txRow(tx, maps, { selectable = false, selectedSet = null, accountId = null, showDate = false } = {}) {
@@ -39,7 +48,7 @@ export function txRow(tx, maps, { selectable = false, selectedSet = null, accoun
   const meta =
     tx.type === 'transfer'
       ? html`<span>${acc?.name || '?'} → ${to?.name || '?'}</span>`
-      : html`<span>${cat?.name || UNCATEGORIZED.name}</span><span>${acc?.name || ''}</span>`;
+      : html`<span>${cat?.name || UNCATEGORIZED.name}</span><span>${acc?.name || ''}</span>${shareLabel(tx, maps) ? html`<span class="tag tag-share">${shareLabel(tx, maps)}</span>` : ''}`;
   return html`<li class="tx-row${selectable ? '' : ' no-select'}" data-tx="${tx.id}">
     ${selectable ? html`<input type="checkbox" data-select="${tx.id}" aria-label="Sélectionner ${title}" ${selected ? 'checked' : ''}>` : ''}
     ${tx.type === 'transfer' ? transferBadge() : catBadge(cat)}
