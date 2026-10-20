@@ -96,7 +96,8 @@ export default {
   },
 
   actions() {
-    return html`<button type="button" class="icon-btn" data-import title="Importer un relevé CSV" aria-label="Importer un relevé CSV">${icon('upload')}</button>
+    return html`<button type="button" class="icon-btn" data-import-capture title="Importer une capture d’écran de votre banque" aria-label="Importer une capture d’écran de votre banque">${icon('image')}</button>
+      <button type="button" class="icon-btn" data-import title="Importer des opérations (capture ou relevé CSV)" aria-label="Importer des opérations">${icon('upload')}</button>
       <button type="button" class="icon-btn" data-export title="Exporter en CSV" aria-label="Exporter en CSV">${icon('download')}</button>
       <button type="button" class="btn btn-primary desktop-only" data-action="add-tx">${icon('plus', { size: 16 })} Ajouter</button>`;
   },
@@ -226,7 +227,7 @@ export default {
               iconName: 'search',
               title: state.transactions.length ? 'Aucune opération ne correspond' : 'Aucune opération',
               text: state.transactions.length ? 'Modifiez la période ou les filtres pour élargir la recherche.' : 'Ajoutez une opération ou importez un relevé bancaire au format CSV.',
-              action: html`<div class="row"><button type="button" class="btn btn-primary" data-action="add-tx">Ajouter une opération</button><button type="button" class="btn" data-import>Importer un CSV</button></div>`,
+              action: html`<div class="row"><button type="button" class="btn btn-primary" data-action="add-tx">Ajouter une opération</button><button type="button" class="btn" data-import-capture>${icon('image', { size: 16 })} Depuis une capture</button><button type="button" class="btn" data-import>Importer un CSV</button></div>`,
             })}
       </section>`;
   },

@@ -6,6 +6,8 @@
 const VERSION = 'dev';
 const CACHE = `pecule-${VERSION}`;
 const FONTS = 'pecule-polices';
+// Versionné avec les fichiers de vendor/tesseract : à changer lors d'une mise à jour du moteur.
+const OCR = 'pecule-lecture-tesseract-7.0.0';
 const ASSETS = [
   './',
   'index.html',
@@ -17,6 +19,8 @@ const ASSETS = [
   'js/app.js',
   'js/benefits.js',
   'js/calc.js',
+  'js/capture-import.js',
+  'js/capture.js',
   'js/charts.js',
   'js/components.js',
   'js/csv.js',
@@ -26,6 +30,7 @@ const ASSETS = [
   'js/forms.js',
   'js/importer.js',
   'js/insights.js',
+  'js/ocr.js',
   'js/onboarding.js',
   'js/setup.js',
   'js/store.js',
@@ -57,7 +62,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONTS).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONTS && k !== OCR).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -90,6 +95,23 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin !== self.location.origin) return;
+
+  // Moteur de lecture des captures (plusieurs Mo) : téléchargé à la première utilisation, puis gardé.
+  if (url.pathname.includes('/vendor/')) {
+    event.respondWith(
+      caches.open(OCR).then((cache) =>
+        cache.match(request).then(
+          (hit) =>
+            hit ||
+            fetch(request).then((res) => {
+              if (res.ok) cache.put(request, res.clone());
+              return res;
+            }),
+        ),
+      ),
+    );
+    return;
+  }
 
   // Fichiers de l'application : cache d'abord, réseau en secours.
   event.respondWith(

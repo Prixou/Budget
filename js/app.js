@@ -2,7 +2,7 @@
 import { dueOccurrences } from './calc.js';
 import { installTooltipHandlers, mountCharts, resetCharts } from './charts.js';
 import { openTransactionForm } from './forms.js';
-import { openImportDialog } from './importer.js';
+import { imagesFrom, openCaptureImport, openImportChooser } from './capture-import.js';
 import { openStartFresh } from './onboarding.js';
 import { exportData, loadDemo, processRecurring, requestPersistence, store, updateSettings } from './store.js';
 import { icon, offerFile, openModal, toast } from './ui.js';
@@ -235,7 +235,11 @@ function installGlobalHandlers() {
       return;
     }
     if (t.closest('[data-import]')) {
-      openImportDialog();
+      openImportChooser();
+      return;
+    }
+    if (t.closest('[data-import-capture]')) {
+      openCaptureImport();
       return;
     }
     const shift = t.closest('[data-month-shift]');
@@ -289,6 +293,15 @@ function installGlobalHandlers() {
     } else if ((key === 'arrowleft' || key === 'arrowright') && MONTH_VIEWS.has(current.view.id) && !e.target.closest('.chart')) {
       shiftSessionMonth(key === 'arrowleft' ? -1 : 1);
     }
+  });
+
+  // Coller une capture d'écran (Ctrl+V) n'importe où : import des opérations qu'elle contient.
+  document.addEventListener('paste', (e) => {
+    if (document.querySelector('dialog[open]') || e.target.closest?.('input, textarea')) return;
+    const images = imagesFrom(e.clipboardData);
+    if (!images.length) return;
+    e.preventDefault();
+    openCaptureImport(images);
   });
 
   window.addEventListener('hashchange', navigate);

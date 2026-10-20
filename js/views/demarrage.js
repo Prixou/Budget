@@ -258,7 +258,7 @@ const steps = [
           <li>${icon('pie', { size: 18 })}<span>${budgets ? `${pluralize(budgets, 'budget')} mensuel${budgets > 1 ? 's' : ''}` : 'Pas de budget pour l’instant'}</span></li>
         </ul>
         ${hasData ? html`<div class="callout callout-warning">${icon('alert')}<div>Vos données actuelles seront remplacées. Exportez une sauvegarde avant si besoin (Paramètres).</div></div>` : ''}
-        <p class="muted small">Tout reste modifiable ensuite. Pour retrouver votre historique, importez le relevé CSV de votre banque depuis « Opérations ».</p>`;
+        <p class="muted small">Tout reste modifiable ensuite. Pour retrouver vos dernières opérations, importez des captures d’écran de l’application de votre banque, ou un relevé CSV, depuis « Opérations ».</p>`;
     },
     read: () => true,
   },

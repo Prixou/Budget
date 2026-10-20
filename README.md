@@ -23,7 +23,7 @@ L'assistant crée les comptes, les revenus et prélèvements récurrents et les 
 | Rubrique | Ce qu'elle permet |
 |---|---|
 | **Tableau de bord** | Solde total, prévision de fin de mois, revenus / dépenses / reste à vivre (épargne versée déduite) / taux d'épargne du mois avec comparaison au mois précédent, alertes (budget dépassé, compte à découvert), graphique sur 6 mois, dépenses par catégorie, rythme des dépenses (moyenne par jour, projection), budgets, échéances à venir, dernières opérations, objectifs. |
-| **Opérations** | Dépenses, revenus et virements entre comptes. Saisie rapide : montant, puis un clic sur l'une des catégories les plus utilisées (étiquettes, notes et répétition sont repliées dans « Plus d'options »). Paiement partagé entre titres-restaurant et carte bancaire. Recherche (sans tenir compte des accents), filtres (période, type, compte, catégorie, pointage, étiquette), tri, sélection multiple (pointer, changer de catégorie, supprimer), duplication, étiquettes, notes. Le libellé mémorise la catégorie utilisée la dernière fois. Import d'un relevé CSV et export CSV. |
+| **Opérations** | Dépenses, revenus et virements entre comptes. Saisie rapide : montant, puis un clic sur l'une des catégories les plus utilisées (étiquettes, notes et répétition sont repliées dans « Plus d'options »). Paiement partagé entre titres-restaurant et carte bancaire. **Import par capture d'écran** de l'application de votre banque (lue sur l'appareil) ou par relevé CSV. Recherche (sans tenir compte des accents), filtres (période, type, compte, catégorie, pointage, étiquette), tri, sélection multiple (pointer, changer de catégorie, supprimer), duplication, étiquettes, notes. Le libellé mémorise la catégorie utilisée la dernière fois. Import d'un relevé CSV et export CSV. |
 | **Budgets** | Plafond mensuel par catégorie, valable tous les mois ou pour un seul mois, avec **report du reste** (ou du dépassement) sur le mois suivant. États « dans le budget », « bientôt atteint » (seuil réglable), « consommé », « dépassé ». Suggestions calculées d'après vos 3 derniers mois. Montant des revenus restant à affecter. |
 | **Comptes** | Compte courant, épargne (Livret A, LDDS, LEP, PEL… avec taux, intérêts estimés et plafond), espèces, carte de crédit, investissement, **titres-restaurant, CESU, chèques-vacances ou cadeaux** (crédit mensuel automatique, part de l'employeur, plafond de 25 € par jour, date limite du solde). Solde, solde pointé, évolution sur 12 mois, patrimoine net (dettes déduites). **Rapprochement bancaire** : saisissez le solde de votre relevé, l'écart est corrigé automatiquement. Comptes clôturés conservés dans l'historique. |
 | **Récurrences** | Salaire, loyer, abonnements, virements d'épargne… de quotidien à annuel, avec date de fin facultative. Enregistrement automatique à l'échéance ou validation manuelle. Charges fixes mensuelles, reste à vivre (revenus − charges fixes − virements programmés vers l'épargne), coût annuel des abonnements, calendrier des 45 prochains jours, mise en pause. |
@@ -59,6 +59,12 @@ Le dépôt contient un workflow (`.github/workflows/pages.yml`) qui lance les te
 2. Poussez sur la branche `main`, ou lancez le workflow « Tests et déploiement » depuis l'onglet **Actions** (bouton *Run workflow*).
 3. L'application est disponible à l'adresse `https://<utilisateur>.github.io/<dépôt>/`. Sur mobile, utilisez « Ajouter à l'écran d'accueil » pour l'installer.
 
+### Importer depuis une capture d'écran
+
+Dans **Opérations**, bouton image (ou collez une capture avec `Ctrl+V` n'importe où dans l'application) : faites une ou plusieurs captures de la liste des opérations dans l'application de votre banque. Pécule lit les dates (« Aujourd'hui », « Lundi 12 octobre », « 09/10/2026 »…), les libellés et les montants, devine la catégorie et signale les opérations déjà saisies. Tout reste modifiable avant l'ajout.
+
+La lecture se fait **sur votre appareil** avec [Tesseract.js](https://github.com/naptha/tesseract.js) (dossier `vendor/tesseract`) : l'image n'est envoyée nulle part. Le moteur (environ 5 Mo) est téléchargé à la première utilisation puis fonctionne hors ligne. Les captures en mode sombre sont prises en charge ; vérifiez toujours les montants, surtout ceux encadrés (signe non lisible).
+
 ### Importer un relevé bancaire
 
 Dans **Opérations**, bouton d'import (flèche vers le haut) : choisissez le fichier CSV exporté depuis votre banque. Le séparateur (`;`, `,`, tabulation), l'encodage (UTF-8 ou Windows-1252) et les colonnes (date, libellé, montant ou débit / crédit) sont détectés automatiquement et restent modifiables. Un aperçu signale les doublons probables, et les catégories sont retrouvées à partir de vos opérations passées.
@@ -82,6 +88,9 @@ js/setup.js             assistant de démarrage : construit comptes, récurrence
 js/family.js            couple (partage, équilibre, prévision) et plan bébé (congés, aides, garde)
 js/benefits.js          titres-restaurant et avantages : soldes, règles d'utilisation, échéances
 js/csv.js               lecture / écriture CSV, import de relevés
+js/capture.js           captures d'écran bancaires : dates, libellés, montants, catégories (analyse du texte)
+js/ocr.js               lecture du texte d'une image sur l'appareil (Tesseract.js, chargé à la demande)
+vendor/tesseract/       moteur de lecture et modèle français (licences dans le dossier)
 js/charts.js            graphiques SVG et info-bulles
 js/views/*.js           une vue par rubrique
 tests/*.test.js         tests unitaires (node --test)

@@ -208,11 +208,29 @@ Un compte de type « Titres-restaurant, chèques… » suit une carte ou un carn
 - Un conseil invite à régler des courses en titres quand des courses sont payées par carte alors qu'un solde de titres attend. Il rappelle aussi les échéances (fin de la dérogation pour les courses, fin février).
 - En couple, la carte a un titulaire : des courses communes payées en titres comptent comme payées par lui.
 
-## 12. Limites
+## 12. Import par capture d'écran
+
+**Choix technique.** La reconnaissance de texte se fait dans le navigateur avec Tesseract.js 7 (moteur LSTM, modèle français `best_int`, environ 5 Mo). Les fichiers sont hébergés avec l'application (`vendor/tesseract`), sans service tiers : l'image ne quitte jamais l'appareil, ce qui respecte le principe « vos données restent chez vous ». Le moteur est chargé à la première utilisation, gardé par le service worker, et fonctionne ensuite hors ligne. Un service en ligne d'IA lirait mieux certaines mises en page, mais il faudrait y envoyer vos relevés.
+
+**Préparation de l'image.** Conversion en niveaux de gris, agrandissement des captures de moins de 900 px de large, inversion des captures en mode sombre. Lecture ligne par ligne sur toute la largeur (`psm 6`) pour garder le libellé et le montant sur la même ligne.
+
+**Analyse du texte** (`js/capture.js`, testée) :
+- en-têtes de date : « Aujourd'hui », « Hier », « Lundi 12 octobre », « 19 oct. 2026 », « 09/10/2026 ». Sans année, c'est la plus récente qui ne soit pas dans le futur ;
+- montants au format français (`-1 234,56 €`, `+16,50 €`, `€12.50`), avec correction des confusions courantes (« O » lu pour un zéro, tirets typographiques) ;
+- libellé pris sur la ligne du montant, ou sur la ligne de texte qui le précède ;
+- lignes de synthèse ignorées (solde, total, plafond), ainsi que le solde affiché en haut de l'écran ;
+- sans signe lisible, une dépense par défaut, sauf pour les libellés de revenus (salaire, remboursement, CAF, virement reçu). Ces montants sont signalés dans l'aperçu ;
+- catégorie retrouvée d'après l'historique (même libellé), sinon d'après des mots-clés (enseignes, opérateurs, transports…) ;
+- plusieurs captures qui se chevauchent sont fusionnées, et les opérations déjà saisies (même date, montant et compte) sont décochées.
+
+**Mesure** (captures fictives d'application bancaire, claire et sombre, 1 170 px de large) : 10 opérations sur 10 reconnues avec la bonne date, le bon montant et la bonne catégorie. Lecture des 2 captures en 1,9 s, moteur compris. Un seul libellé contient une erreur de lecture (« Lid! » pour « Lidl »), corrigeable dans l'aperçu.
+
+## 13. Limites
 
 - Les conseils sont indicatifs et ne remplacent pas un conseiller financier.
 - Les taux et plafonds sont datés (`REFERENCE.ratesDate`) et doivent être mis à jour à chaque révision.
 - La prévision de trésorerie ignore par défaut les revenus variables (case à cocher pour les inclure).
 - La détection d'abonnements ne voit que ce qui passe par vos comptes : un abonnement payé via un magasin d'applications apparaît sous le nom du magasin.
 - Les budgets proposés par l'assistant de démarrage sont un point de départ, pas une norme. Ils reprennent une part de ce qui reste après les charges fixes et l'épargne, avec un plafond par adulte (par exemple 300 € de courses), puis s'ajustent avec les vraies dépenses (bouton « Suggérer » des budgets).
+- La lecture des captures dépend de la netteté et de la mise en page de l'application bancaire : vérifiez les montants avant d'ajouter les opérations.
 - Les droits aux aides familiales sont des estimations : seule la CAF les calcule (situation, ressources exactes, date de déclaration de grossesse). Le revenu fiscal de référence est estimé à 90 % des revenus nets annuels s'il n'est pas saisi. Le CMG et la PreParE sont simplifiés ou non calculés.
