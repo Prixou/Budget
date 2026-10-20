@@ -1,5 +1,5 @@
 // Opérations récurrentes : salaire, loyer, abonnements, virements d'épargne.
-import { FREQUENCIES, dueOccurrences, monthlyEquivalent, nextOccurrence, occurrencesBetween, upcoming } from '../calc.js';
+import { FREQUENCIES, dueOccurrences, monthlyEquivalent, nextOccurrence, occurrencesBetween, plannedMonthlySavings, upcoming } from '../calc.js';
 import { catBadge, kpi, lookups, transferBadge } from '../components.js';
 import { amountField, bindShareField, defaultShare, shareField } from '../forms.js';
 import { confirmOccurrence, deleteRecurring, processRecurring, saveRecurring, skipOccurrence, store } from '../store.js';
@@ -169,6 +169,9 @@ export default {
     const active = rules.filter((r) => r.active);
     const fixedCosts = sum(active.filter((r) => r.type === 'expense'), monthlyEquivalent);
     const fixedIncome = sum(active.filter((r) => r.type === 'income'), monthlyEquivalent);
+    // Les virements programmés vers l'épargne ne sont plus disponibles pour vivre.
+    const saving = plannedMonthlySavings(state);
+    const left = fixedIncome - fixedCosts - saving;
     const subs = active.filter((r) => r.type === 'expense' && r.categoryId === 'cat-abonnements');
     const subsCost = sum(subs, monthlyEquivalent);
     const pending = active.filter((r) => !r.autoCreate).map((rule) => ({ rule, dates: dueOccurrences(rule, today) })).filter((p) => p.dates.length);
@@ -210,7 +213,11 @@ export default {
       <section class="kpis kpis-cards">
         ${kpi('Charges fixes / mois', formatMoney(fixedCosts))}
         ${kpi('Revenus fixes / mois', formatMoney(fixedIncome))}
-        ${kpi('Reste après charges fixes', html`<span class="${fixedIncome - fixedCosts < 0 ? 'neg' : ''}">${formatMoney(fixedIncome - fixedCosts)}</span>`)}
+        ${kpi(
+          'Reste à vivre / mois',
+          html`<span class="${left < 0 ? 'neg' : ''}">${formatMoney(left)}</span>`,
+          html`<span class="kpi-delta">${saving ? `après charges fixes et ${formatMoney(saving)} d’épargne programmée` : 'après charges fixes'}</span>`,
+        )}
         ${kpi('Abonnements', formatMoney(subsCost), html`<span class="kpi-delta">${pluralize(subs.length, 'abonnement')} · ${formatMoney(subsCost * 12)} / an</span>`)}
       </section>
 

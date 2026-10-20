@@ -618,6 +618,43 @@ export function upcoming(state, from, to) {
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
+const SAVINGS_TYPES = new Set(['epargne', 'investissement']);
+
+/**
+ * Argent mis de côté par un virement (opération ou récurrence) : + montant vers un compte
+ * d'épargne ou de placement, − montant retiré de l'épargne, 0 pour un virement entre comptes courants.
+ */
+export function savingsFlow(tx, accountsById) {
+  if (tx.type !== 'transfer') return 0;
+  const toSavings = SAVINGS_TYPES.has(accountsById.get(tx.toAccountId)?.type);
+  const fromSavings = SAVINGS_TYPES.has(accountsById.get(tx.accountId)?.type);
+  return toSavings === fromSavings ? 0 : toSavings ? tx.amount : -tx.amount;
+}
+
+/** Épargne programmée par mois : virements récurrents actifs vers l'épargne (équivalent mensuel). */
+export function plannedMonthlySavings(state) {
+  const accounts = new Map(state.accounts.map((a) => [a.id, a]));
+  return sum(
+    state.recurring.filter((r) => r.active && r.type === 'transfer'),
+    (r) => Math.sign(savingsFlow(r, accounts)) * monthlyEquivalent(r),
+  );
+}
+
+/**
+ * Épargne d'un mois : virements déjà passés vers l'épargne (net des retraits),
+ * plus, pour le mois en cours ou à venir, les virements récurrents encore prévus.
+ */
+export function monthSavings(state, month, today = todayISO()) {
+  const accounts = new Map(state.accounts.map((a) => [a.id, a]));
+  const end = monthEnd(month);
+  let done = 0;
+  for (const tx of filterTransactions(state, { from: monthStart(month), to: end, type: 'transfer' })) done += savingsFlow(tx, accounts);
+  const from = monthStart(month) > today ? monthStart(month) : addDays(today, 1);
+  let planned = 0;
+  if (from <= end) for (const { rule } of upcoming(state, from, end)) planned += savingsFlow(rule, accounts);
+  return { done, planned, total: done + planned };
+}
+
 /** Prévision du solde en fin de mois : solde actuel + opérations récurrentes restantes. */
 export function endOfMonthForecast(state, today = todayISO()) {
   const current = totalBalance(state, today);

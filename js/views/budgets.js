@@ -1,13 +1,13 @@
 // Budgets mensuels par catégorie, avec report du reste et suggestions.
 import { benefitBalances } from '../benefits.js';
-import { budgetReport, effectiveBudget, filterTransactions, spendIndex, suggestBudgets, summarize } from '../calc.js';
+import { budgetReport, effectiveBudget, filterTransactions, monthSavings, spendIndex, suggestBudgets, summarize, upcoming } from '../calc.js';
 import { MEAL_VOUCHERS } from '../defaults.js';
 import { meter } from '../charts.js';
 import { catBadge, kpi, monthNav, statusPill } from '../components.js';
 import { amountField } from '../forms.js';
 import { applyBudgetSuggestions, removeBudget, setBudget, store } from '../store.js';
 import { categoryOptions, confirmDialog, emptyState, fieldError, formValues, icon, openModal, toast } from '../ui.js';
-import { capitalize, formatMoney, formatPercent, html, monthEnd, monthLabel, monthRange, monthStart, parseAmount, raw, shiftMonth, sum } from '../utils.js';
+import { addDays, capitalize, formatMoney, formatPercent, html, monthEnd, monthLabel, monthRange, monthStart, parseAmount, raw, shiftMonth, sum, todayISO } from '../utils.js';
 
 function averageSpend(state, categoryId, month, n = 3) {
   const index = spendIndex(state);
@@ -132,12 +132,18 @@ export default {
     const budgeted = report.rows.filter((r) => r.status !== 'none');
     const unbudgeted = report.rows.filter((r) => r.status === 'none');
     const monthTxs = filterTransactions(state, { from: monthStart(month), to: monthEnd(month) });
-    const income = summarize(monthTxs).income;
+    // Revenus reçus, plus ceux encore attendus ce mois-ci (salaire en fin de mois…).
+    const today = todayISO();
+    const from = monthStart(month) > today ? monthStart(month) : addDays(today, 1);
+    const expected = from <= monthEnd(month) ? sum(upcoming(state, from, monthEnd(month)).filter((u) => u.rule.type === 'income'), (u) => u.rule.amount) : 0;
+    const income = summarize(monthTxs).income + expected;
     const benefitIncome = sum(monthTxs.filter((tx) => tx.type === 'income' && tx.categoryId === 'cat-avantages'), (tx) => tx.amount);
     const vouchers = benefitBalances(state).meal;
     const groceries = monthEnd(month) <= MEAL_VOUCHERS.groceriesUntil;
     const foodLeft = sum(report.rows.filter((r) => (r.category.id === 'cat-restaurants' || (groceries && r.category.id === 'cat-courses')) && r.status !== 'none'), (r) => Math.max(0, r.remaining));
-    const toAssign = income - report.totals.available;
+    // L'épargne du mois (virements passés et prévus vers un livret ou un placement) n'est pas à dépenser.
+    const saving = Math.max(0, monthSavings(state, month).total);
+    const toAssign = income - report.totals.available - saving;
     const t = report.totals;
     const overallRatio = t.available > 0 ? t.spent / t.available : 0;
     const overallStatus = t.remaining < 0 ? 'over' : overallRatio * 100 >= state.settings.budgetAlert ? 'warning' : 'ok';
@@ -153,10 +159,10 @@ export default {
         </div>
         ${t.available ? meter(overallRatio, overallStatus, 'Budget global') : ''}
         ${income
-          ? html`<div class="callout ${toAssign < 0 ? 'callout-warning' : ''}">${icon('info')}<div>Revenus du mois : <strong class="money">${formatMoney(income)}</strong>${benefitIncome ? html`, dont ${formatMoney(benefitIncome)} en titres et avantages` : ''}. ${
+          ? html`<div class="callout ${toAssign < 0 ? 'callout-warning' : ''}">${icon('info')}<div>Revenus du mois : <strong class="money">${formatMoney(income)}</strong>${expected ? html` (dont ${formatMoney(expected)} encore attendus)` : ''}${benefitIncome ? html`, dont ${formatMoney(benefitIncome)} en titres et avantages` : ''}. ${
               toAssign >= 0
-                ? html`Il reste <strong class="money">${formatMoney(toAssign)}</strong> non affectés à un budget (épargne possible).`
-                : html`Vos budgets dépassent vos revenus de <strong class="money">${formatMoney(-toAssign)}</strong>.`
+                ? html`${saving ? html`Après <strong class="money">${formatMoney(saving)}</strong> d’épargne, il` : 'Il'} reste <strong class="money">${formatMoney(toAssign)}</strong> non affectés à un budget${saving ? '' : ' (épargne possible)'}.`
+                : html`Vos budgets${saving ? html` et votre épargne (${formatMoney(saving)})` : ''} dépassent vos revenus de <strong class="money">${formatMoney(-toAssign)}</strong>.`
             }</div></div>`
           : ''}
         ${vouchers

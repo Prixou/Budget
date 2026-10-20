@@ -12,6 +12,7 @@ import {
   monthPace,
   firstTransactionDate,
   monthlyTotals,
+  monthSavings,
   netWorth,
   summarize,
   transactionsByDate,
@@ -92,6 +93,9 @@ export default {
     const versus = inProgress ? 'vs même période du mois dernier' : 'vs mois précédent';
     const cur = summarize(txs);
     const prev = summarize(prevTxs);
+    // Reste à vivre : ce qui reste une fois les dépenses payées et l'épargne mise de côté.
+    const saved = monthSavings(state, month, today);
+    const left = cur.net - saved.done;
     const expectedIncome = inProgress ? sum(upcoming(state, addDays(today, 1), monthEnd(month)).filter((u) => u.rule.type === 'income'), (u) => u.rule.amount) : 0;
     const savingsPending = expectedIncome > 0 && cur.income < cur.expense;
     const worth = netWorth(state, today);
@@ -164,7 +168,15 @@ export default {
         <div class="hero-kpis"><div class="kpis">
           ${kpi('Revenus du mois', formatMoney(cur.income), deltaText(comparable ? change(cur.income, prev.income) : null, { suffix: versus }))}
           ${kpi('Dépenses du mois', formatMoney(cur.expense), deltaText(comparable ? change(cur.expense, prev.expense) : null, { goodWhenUp: false, suffix: versus }))}
-          ${kpi('Reste à vivre', html`<span class="${cur.net < 0 ? 'neg' : ''}">${formatMoney(cur.net, { sign: 'always' })}</span>`, html`<span class="kpi-delta">Revenus − dépenses</span>`)}
+          ${kpi(
+            'Reste à vivre',
+            html`<span class="${left < 0 ? 'neg' : ''}">${formatMoney(left, { sign: 'always' })}</span>`,
+            html`<span class="kpi-delta">${
+              saved.done
+                ? `Revenus − dépenses − ${formatMoney(saved.done, { decimals: false })} mis de côté`
+                : 'Revenus − dépenses − épargne'
+            }${saved.planned > 0 ? ` · ${formatMoney(saved.planned, { decimals: false })} d’épargne encore prévue` : ''}</span>`,
+          )}
           ${kpi(
             "Taux d'épargne",
             savingsPending || cur.savingsRate == null ? '—' : cur.savingsRate < -1 ? '< −100 %' : formatPercent(cur.savingsRate),
