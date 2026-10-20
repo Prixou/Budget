@@ -518,6 +518,13 @@ export function saveAccount(account) {
   return store.commit((s) => upsert(s.accounts, account, 'acc-'));
 }
 
+/** Ajoute une catégorie par défaut absente (données créées avant son ajout à l'application). */
+export function ensureCategory(id) {
+  if (store.state.categories.some((c) => c.id === id)) return;
+  const category = defaultCategories().find((c) => c.id === id);
+  if (category) store.commit((s) => void (s.categories = [...s.categories, category]));
+}
+
 export function deleteAccount(id) {
   store.commit((s) => {
     s.accounts = s.accounts.filter((a) => a.id !== id);

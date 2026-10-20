@@ -2728,3 +2728,40 @@ kbd {
     color: var(--muted);
   }
 }
+
+/* Titres-restaurant et avantages */
+.hint-warning {
+  color: var(--warning-text);
+}
+
+.benefit-hint {
+  margin: -6px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.benefit-hint.hint-warning {
+  color: var(--warning-text);
+}
+
+.voucher-part {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.voucher-part[hidden],
+.benefit-fields[hidden],
+[data-voucher][hidden],
+[data-credit-amount][hidden] {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .voucher-part {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

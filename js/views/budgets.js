@@ -1,5 +1,7 @@
 // Budgets mensuels par catégorie, avec report du reste et suggestions.
+import { benefitBalances } from '../benefits.js';
 import { budgetReport, effectiveBudget, filterTransactions, spendIndex, suggestBudgets, summarize } from '../calc.js';
+import { MEAL_VOUCHERS } from '../defaults.js';
 import { meter } from '../charts.js';
 import { catBadge, kpi, monthNav, statusPill } from '../components.js';
 import { amountField } from '../forms.js';
@@ -129,7 +131,12 @@ export default {
     const report = budgetReport(state, month, { alertThreshold: state.settings.budgetAlert });
     const budgeted = report.rows.filter((r) => r.status !== 'none');
     const unbudgeted = report.rows.filter((r) => r.status === 'none');
-    const income = summarize(filterTransactions(state, { from: monthStart(month), to: monthEnd(month) })).income;
+    const monthTxs = filterTransactions(state, { from: monthStart(month), to: monthEnd(month) });
+    const income = summarize(monthTxs).income;
+    const benefitIncome = sum(monthTxs.filter((tx) => tx.type === 'income' && tx.categoryId === 'cat-avantages'), (tx) => tx.amount);
+    const vouchers = benefitBalances(state).meal;
+    const groceries = monthEnd(month) <= MEAL_VOUCHERS.groceriesUntil;
+    const foodLeft = sum(report.rows.filter((r) => (r.category.id === 'cat-restaurants' || (groceries && r.category.id === 'cat-courses')) && r.status !== 'none'), (r) => Math.max(0, r.remaining));
     const toAssign = income - report.totals.available;
     const t = report.totals;
     const overallRatio = t.available > 0 ? t.spent / t.available : 0;
@@ -146,11 +153,14 @@ export default {
         </div>
         ${t.available ? meter(overallRatio, overallStatus, 'Budget global') : ''}
         ${income
-          ? html`<div class="callout ${toAssign < 0 ? 'callout-warning' : ''}">${icon('info')}<div>Revenus du mois : <strong class="money">${formatMoney(income)}</strong>. ${
+          ? html`<div class="callout ${toAssign < 0 ? 'callout-warning' : ''}">${icon('info')}<div>Revenus du mois : <strong class="money">${formatMoney(income)}</strong>${benefitIncome ? html`, dont ${formatMoney(benefitIncome)} en titres et avantages` : ''}. ${
               toAssign >= 0
                 ? html`Il reste <strong class="money">${formatMoney(toAssign)}</strong> non affectés à un budget (épargne possible).`
                 : html`Vos budgets dépassent vos revenus de <strong class="money">${formatMoney(-toAssign)}</strong>.`
             }</div></div>`
+          : ''}
+        ${vouchers
+          ? html`<div class="callout">${icon('ticket')}<div>Titres-restaurant disponibles : <strong class="money">${formatMoney(vouchers)}</strong>, pour les repas${groceries ? ' et les courses alimentaires' : ''}${foodLeft ? html`. Il reste <strong class="money">${formatMoney(foodLeft)}</strong> dans vos budgets ${groceries ? 'Courses et Restaurants' : 'Restaurants'} : payez-les en priorité avec vos titres` : ''}.</div></div>`
           : ''}
       </section>
 

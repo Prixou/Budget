@@ -19,7 +19,8 @@ import {
   transactionsByDate,
   upcoming,
 } from './calc.js';
-import { REFERENCE, SAVINGS_PRODUCTS } from './defaults.js';
+import { benefitBalances } from './benefits.js';
+import { MEAL_VOUCHERS, REFERENCE, SAVINGS_PRODUCTS } from './defaults.js';
 import { averageSharedSpending, babyPlan, balanceStatement, coupleLedger, partnerName, splitRatio } from './family.js';
 import { addDays, addMonths, daysBetween, monthEnd, monthKey, monthRange, normalizeText, shiftMonth, sum, todayISO } from './utils.js';
 
@@ -327,8 +328,11 @@ export function cashForecast(state, today = todayISO(), days = 90, { exclude = n
   const daysLeft = daysBetween(today, monthLast) + 1;
   // « Disponible à dépenser » : ce qui reste d'ici la fin du mois une fois les prélèvements prévus passés.
   const available = Math.round(start + scheduledToMonthEnd);
+  // Titres-restaurant, chèques… : disponibles aussi, mais seulement pour certaines dépenses.
+  const benefits = benefitBalances(state, today);
   return {
     accounts,
+    benefits,
     start: Math.round(start),
     points,
     min,
@@ -981,7 +985,37 @@ export function recommendations(state, today = todayISO(), base = baseline(state
     });
   }
 
-  // 16. Arrivée de bébé : épargne à constituer avant la naissance
+  // 16. Titres-restaurant : courses, échéances, solde inutilisé
+  const vouchers = benefitBalances(state, today).accounts.filter((b) => b.kind === 'restaurant' && b.balance > 0);
+  if (vouchers.length) {
+    const balance = sum(vouchers, (b) => b.balance);
+    const groceriesLeft = daysBetween(today, MEAL_VOUCHERS.groceriesUntil);
+    const expires = vouchers[0].expires;
+    const expiresSoon = expires && daysBetween(today, expires) <= 60;
+    const voucherIds = new Set(vouchers.map((b) => b.account.id));
+    const cardGroceries = sum(
+      filterTransactions(state, { from: addDays(today, -29), to: today, type: 'expense' }).filter((t) => t.categoryId === 'cat-courses' && !voucherIds.has(t.accountId)),
+      (t) => t.amount,
+    );
+    const date = (iso) => iso.split('-').reverse().join('/');
+    const parts = [];
+    if (groceriesLeft >= 0 && cardGroceries > 0) parts.push(`Vous avez payé ${fmt(cardGroceries)} de courses par carte ces 30 derniers jours : réglez-en une partie en titres-restaurant (25 € par jour au plus) et gardez cet argent sur votre compte.`);
+    if (groceriesLeft >= 0) parts.push(`Les courses alimentaires sont acceptées jusqu'au ${date(MEAL_VOUCHERS.groceriesUntil)} ; une prolongation pour 2027 est en discussion au Parlement.`);
+    if (expiresSoon) parts.push(`Le solde de l'an dernier est utilisable jusqu'au ${date(expires)}. Sur carte, il est en général reporté automatiquement : vérifiez-le début mars (demande possible jusqu'au 15 mars).`);
+    if (parts.length) {
+      tips.push({
+        id: `meal-vouchers-${today.slice(0, 7)}`,
+        severity: expiresSoon || (groceriesLeft >= 0 && groceriesLeft <= 45) ? 'medium' : 'low',
+        pillar: 'spend',
+        title: `${fmt(balance)} de titres-restaurant à utiliser`,
+        text: parts.join(' '),
+        gain: null,
+        action: { type: 'link', href: `#transactions?account=${vouchers[0].account.id}&all=1`, label: 'Voir les titres-restaurant' },
+      });
+    }
+  }
+
+  // 17. Arrivée de bébé : épargne à constituer avant la naissance
   const plan = state.baby?.dueDate && state.baby.dueDate > today && state.household ? babyPlan(state.baby, state.household, { today }) : null;
   if (plan && plan.savingsTarget > 0 && !state.goals.some((g) => g.id === 'goal-bebe')) {
     const twins = plan.count > 1;
@@ -996,7 +1030,7 @@ export function recommendations(state, today = todayISO(), base = baseline(state
     });
   }
 
-  // 17. Couple : équilibre à régler, partage 50/50 avec des revenus très différents
+  // 18. Couple : équilibre à régler, partage 50/50 avec des revenus très différents
   const household = state.household;
   if (household?.enabled) {
     const balance = balanceStatement(household, coupleLedger(state).net);

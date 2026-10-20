@@ -1,8 +1,10 @@
 // Formulaire d'opération (dépense, revenu, virement), partagé par toutes les vues.
+import { benefitAccepts, benefitBalances, benefitKind, isBenefit, spentOn } from './benefits.js';
 import { FREQUENCIES, descriptionMemory } from './calc.js';
+import { BENEFITS, MEAL_VOUCHERS } from './defaults.js';
 import { deleteTransactions, processRecurring, saveRecurring, saveTransaction, store } from './store.js';
 import { accountOptions, categoryOptions, confirmDialog, fieldError, formValues, icon, openModal, options, toast } from './ui.js';
-import { centsToInput, getMoneyConfig, html, isValidISODate, normalizeText, parseAmount, raw, todayISO } from './utils.js';
+import { centsToInput, formatDate, formatMoney, getMoneyConfig, html, isValidISODate, normalizeText, parseAmount, raw, todayISO } from './utils.js';
 
 export function currencySymbol() {
   const { currency, locale } = getMoneyConfig();
@@ -78,6 +80,70 @@ export function bindShareField(form, state) {
   return update;
 }
 
+/* ------------------------------------------------------------------ */
+/* Titres-restaurant et avantages                                      */
+/* ------------------------------------------------------------------ */
+
+function voucherFields(meals) {
+  if (!meals.length) return '';
+  return html`<div class="voucher-part" data-voucher-part hidden>
+    ${amountField({ name: 'voucherPart', label: 'Dont payé en titres-restaurant', required: false })}
+    ${meals.length > 1
+      ? html`<label class="field"><span>Avec</span><select class="select" name="voucherAccount" id="f-voucherAccount">${options(
+          meals.map((m) => ({ value: m.account.id, label: `${m.account.name} (${formatMoney(m.balance)})` })),
+          meals[0].account.id,
+        )}</select></label>`
+      : html`<input type="hidden" name="voucherAccount" value="${meals[0].account.id}">`}
+  </div>`;
+}
+
+/**
+ * Rappels des règles quand on paie avec un avantage (catégories acceptées, 25 € par jour),
+ * et champ « dont payé en titres-restaurant » pour un paiement partagé avec la carte bancaire.
+ */
+function bindBenefitHints(form, state, { editing, txId, meals }) {
+  const hint = form.querySelector('[data-benefit-hint]');
+  const part = form.querySelector('[data-voucher-part]');
+  const accounts = new Map(state.accounts.map((a) => [a.id, a]));
+  const update = () => {
+    const v = formValues(form);
+    const account = accounts.get(v.accountId);
+    const date = isValidISODate(v.date) ? v.date : todayISO();
+    const amount = parseAmount(v.amount) || 0;
+    let text = '';
+    let warn = false;
+    let showPart = false;
+    if (v.type === 'expense' && isBenefit(account)) {
+      const kind = benefitKind(account);
+      const info = BENEFITS[kind];
+      text = `${info.label} : ${info.use}.`;
+      if (v.categoryId && !benefitAccepts(kind, v.categoryId, date)) {
+        warn = true;
+        text = kind === 'restaurant' && v.categoryId === 'cat-courses' ? `Les courses ne sont acceptées en titres-restaurant que jusqu’au ${formatDate(MEAL_VOUCHERS.groceriesUntil)}.` : `Cette dépense n’est en principe pas acceptée (${info.label.toLowerCase()} : ${info.use}).`;
+      }
+      if (kind === 'restaurant') {
+        const already = spentOn(state, account.id, date, txId);
+        if (already + amount > MEAL_VOUCHERS.dailyCap) {
+          warn = true;
+          text += ` Plafond de ${formatMoney(MEAL_VOUCHERS.dailyCap, { decimals: false })} par jour dépassé${already ? ` (${formatMoney(already)} déjà payés ce jour-là)` : ''} : réglez le reste par carte bancaire.`;
+        } else text += ` ${formatMoney(MEAL_VOUCHERS.dailyCap, { decimals: false })} maximum par jour.`;
+      }
+    } else if (part && !editing && v.type === 'expense' && !v.repeat && benefitAccepts('restaurant', v.categoryId, date)) {
+      showPart = true;
+      const meal = meals.find((m) => m.account.id === v.voucherAccount) || meals[0];
+      text = `Titres-restaurant disponibles : ${formatMoney(Math.max(0, meal.balance))}. ${formatMoney(MEAL_VOUCHERS.dailyCap, { decimals: false })} maximum par jour.`;
+    }
+    hint.textContent = text;
+    hint.hidden = !text;
+    hint.classList.toggle('hint-warning', warn);
+    if (part) part.hidden = !showPart;
+  };
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+  return update;
+}
+
 /**
  * Ouvre le formulaire d'opération.
  * tx : opération existante (modification) ; defaults : valeurs initiales pour une nouvelle.
@@ -106,6 +172,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
     ...(tx || {}),
   };
   const memory = descriptionMemory(state);
+  const meals = benefitBalances(state).accounts.filter((m) => m.kind === 'restaurant').sort((a, b) => b.balance - a.balance);
   const suggestions = [...memory.values()].slice(-300).map((m) => m.description);
 
   const body = html`<form class="form" id="tx-form" novalidate>
@@ -144,6 +211,8 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
         <select class="select" name="toAccountId" id="f-toAccountId">${accountOptions(accounts, v.toAccountId, { placeholder: 'Choisir…' })}</select>
       </label>
     </div>
+    <p class="hint benefit-hint" data-benefit-hint hidden></p>
+    ${voucherFields(meals)}
     ${shareField(state, v.share || defaultShare(state, v.accountId, v.categoryId))}
     <label class="field">
       <span>Étiquettes</span>
@@ -199,6 +268,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
         categoryTouched = true;
       });
       const refreshShare = bindShareField(form, store.state);
+      const refreshBenefit = bindBenefitHints(form, store.state, { editing, txId: tx?.id, meals });
 
       // Libellé déjà connu : on propose la même catégorie et le même compte.
       form.elements.description.addEventListener('change', () => {
@@ -210,6 +280,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
         if (known.categoryId) catSelect.value = known.categoryId;
         if (known.accountId && [...form.elements.accountId.options].some((o) => o.value === known.accountId)) form.elements.accountId.value = known.accountId;
         refreshShare(true);
+        refreshBenefit();
       });
 
       const repeat = form.elements.repeat;
@@ -244,6 +315,18 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
           cleared: values.cleared,
           share: values.type === 'expense' && values.share ? values.share : tx?.share ?? null,
         };
+        // Paiement partagé : une partie en titres-restaurant, le reste sur le compte choisi.
+        const partBox = form.querySelector('[data-voucher-part]');
+        const voucher = partBox && !partBox.hidden && values.voucherPart?.trim() ? parseAmount(values.voucherPart) : 0;
+        if (voucher == null || voucher < 0) return fieldError(form, 'voucherPart', 'Montant invalide.');
+        if (voucher > amount) return fieldError(form, 'voucherPart', 'La part en titres-restaurant dépasse le montant de l’opération.');
+        if (voucher > 0) {
+          if (voucher < amount) saveTransaction({ ...data, amount: amount - voucher });
+          saveTransaction({ ...data, amount: voucher, accountId: values.voucherAccount, cleared: false });
+          toast(voucher < amount ? `Opération ajoutée : ${formatMoney(voucher)} en titres-restaurant, ${formatMoney(amount - voucher)} sur le compte` : 'Opération ajoutée, payée en titres-restaurant');
+          close();
+          return;
+        }
         if (values.repeat) {
           const rule = saveRecurring({
             type: data.type,

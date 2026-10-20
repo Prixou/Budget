@@ -1,6 +1,6 @@
 // Jeu de données de démonstration réaliste (8 mois d'historique), déterministe.
 import { dueOccurrences, loanPayment, transactionFromRule } from './calc.js';
-import { defaultBabyPlan, emptyState } from './defaults.js';
+import { defaultBabyPlan, emptyState, MEAL_VOUCHERS } from './defaults.js';
 import { addDays, addMonths, daysInMonth, monthKey, monthRange, shiftMonth } from './utils.js';
 
 function mulberry32(seed) {
@@ -21,6 +21,8 @@ export function buildDemoState(today) {
   const between2 = (min, max) => Math.round((min + rand2() * (max - min)) * 100);
   const pick = (list) => list[Math.floor(rand() * list.length)];
   const pick2 = (list) => list[Math.floor(rand2() * list.length)];
+  // Titres-restaurant : générateur distinct, déjeuners en semaine et courses le samedi (25 € par jour au plus).
+  const rand3 = mulberry32(20261020);
   const chance = (p) => rand() < p;
 
   const state = emptyState();
@@ -37,6 +39,8 @@ export function buildDemoState(today) {
     { id: 'acc-livret', name: 'Livret A', type: 'epargne', product: 'livretA', owner: 'p1', initialBalance: 450000, archived: false, includeInTotal: true, createdAt: 3 },
     { id: 'acc-especes', name: 'Porte-monnaie', type: 'especes', owner: 'joint', initialBalance: 6000, archived: false, includeInTotal: true, createdAt: 4 },
     { id: 'acc-pea', name: 'PEA', type: 'investissement', owner: 'p1', initialBalance: 215000, archived: false, includeInTotal: true, createdAt: 5 },
+    // Carte de titres-restaurant d'Alex : 18 titres de 10 € par mois, 60 % payés par l'employeur.
+    { id: 'acc-tr', name: 'Titres-restaurant Alex', type: 'avantages', benefit: 'restaurant', owner: 'p1', credit: { count: 18, value: 1000, share: 60, day: 3, amount: 18000 }, initialBalance: 3600, archived: false, includeInTotal: true, createdAt: 6 },
   ];
 
   let createdAt = 1000;
@@ -72,6 +76,7 @@ export function buildDemoState(today) {
     ['rec-salaire-sam', 'income', 220000, 'acc-sam', null, 'cat-salaire', 'Salaire Sam', 'monthly', 27],
     ['rec-joint-sam', 'transfer', 95000, 'acc-sam', 'acc-courant', null, 'Participation au compte joint', 'monthly', 28],
     ['rec-mobile-sam', 'expense', 1599, 'acc-sam', null, 'cat-telecom', 'Forfait mobile Sam', 'monthly', 16],
+    ['rec-avantage-acc-tr', 'income', 18000, 'acc-tr', null, 'cat-avantages', 'Crédit titres-restaurant', 'monthly', 3],
   ];
   // Dépenses personnelles réglées depuis le compte joint (à rembourser pour leur part).
   const personal = { 'rec-sport': 'p1', 'rec-mobile': 'p1', 'rec-mobile-sam': 'p2' };
@@ -141,6 +146,16 @@ export function buildDemoState(today) {
     for (let i = 0; i < times(3); i++) add({ type: 'expense', amount: between2(9, 16), date: day2(), accountId: 'acc-sam', categoryId: 'cat-restaurants', description: 'Déjeuner au travail', share: 'p2' });
     if (rand2() < 0.5) add({ type: 'expense', amount: between2(25, 90), date: day2(), accountId: 'acc-sam', categoryId: 'cat-shopping', description: pick2(['Vêtements', 'Chaussures', 'Livres']), share: 'p2' });
     if (rand2() < 0.4) add({ type: 'expense', amount: between2(30, 55), date: day2(), accountId: 'acc-sam', categoryId: 'cat-sport', description: 'Coiffeur', share: 'p2' });
+    // Alex : déjeuners en titres-restaurant, et une partie des courses du samedi.
+    const weekday = (d) => new Date(y, m - 1, d).getDay();
+    const daysList = Array.from({ length: lastDay }, (_, i) => i + 1);
+    const workdays = daysList.filter((d) => weekday(d) >= 1 && weekday(d) <= 5);
+    for (const d of workdays.filter(() => rand3() < 0.45)) {
+      add({ type: 'expense', amount: Math.round((9 + rand3() * 5) * 100), date: `${month}-${String(d).padStart(2, '0')}`, accountId: 'acc-tr', categoryId: 'cat-restaurants', description: rand3() < 0.5 ? 'Déjeuner' : 'Boulangerie du midi', share: 'p1' });
+    }
+    for (const d of daysList.filter((x) => weekday(x) === 6 && rand3() < 0.5 && `${month}-${String(x).padStart(2, '0')}` <= MEAL_VOUCHERS.groceriesUntil)) {
+      add({ type: 'expense', amount: 2500, date: `${month}-${String(d).padStart(2, '0')}`, accountId: 'acc-tr', categoryId: 'cat-courses', description: 'Supermarché (titres-restaurant)', share: 'shared' });
+    }
     // Retrait d'espèces
     add({ type: 'transfer', amount: 6000, date: `${month}-${String(Math.min(2, lastDay)).padStart(2, '0')}`, accountId: 'acc-courant', toAccountId: 'acc-especes', categoryId: null, description: 'Retrait distributeur' });
 

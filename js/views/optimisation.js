@@ -114,7 +114,7 @@ export default {
           ${kpi('Potentiel identifié', html`${formatMoney(gain, { decimals: false })} <span class="kpi-unit">/ an</span>`, html`<span class="kpi-delta">Somme des gains chiffrés ci-dessous</span>`)}
           ${kpi("Taux d'épargne", base.savingsRate == null ? '—' : `${Math.round(base.savingsRate * 100)} %`, html`<span class="kpi-delta">Repère : 20 % (règle 50/30/20)</span>`)}
           ${kpi('Épargne de précaution', base.coverage == null ? '—' : `${formatNumber(base.coverage, 1)} mois`, html`<span class="kpi-delta">Cible : ${base.emergencyMonths} mois de dépenses</span>`)}
-          ${kpi('Disponible à dépenser', formatMoney(forecast.available, { decimals: false }), html`<span class="kpi-delta">d'ici la fin du mois, soit ${formatMoney(forecast.perDay, { decimals: false })} par jour</span>`)}
+          ${kpi('Disponible à dépenser', formatMoney(forecast.available, { decimals: false }), html`<span class="kpi-delta">d'ici la fin du mois, soit ${formatMoney(forecast.perDay, { decimals: false })} par jour${forecast.benefits.total ? html`<br>+ ${formatMoney(forecast.benefits.total, { decimals: false })} en ${forecast.benefits.meal === forecast.benefits.total ? 'titres-restaurant' : 'titres et chèques'}` : ''}</span>`)}
         </div></div>
       </section>
 

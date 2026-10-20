@@ -189,7 +189,26 @@ La première année d'un enfant coûte en moyenne 6 172 € selon le baromètre 
 - **Somme à mettre de côté** : le besoin de trésorerie le plus élevé entre aujourd'hui et la reprise du travail. Il comprend les achats, les dépenses courantes et la baisse de revenus, aides déduites. Après la reprise, le coût relève du budget mensuel.
 - Boutons pour créer l'objectif d'épargne, les récurrences (aides de la CAF, frais de garde) et le budget « Enfants ». Le budget est proposé un mois avant la naissance, pour ne pas rester inutilisé.
 
-## 11. Limites
+## 11. Titres-restaurant et avantages salariés
+
+Un compte de type « Titres-restaurant, chèques… » suit une carte ou un carnet de titres : titres-restaurant, CESU préfinancés, chèques-vacances, chèques cadeaux. Son solde s'ajoute au « disponible à dépenser », mais seulement pour les dépenses qu'il accepte. Règles dans `js/defaults.js` (`BENEFITS`, `MEAL_VOUCHERS`), calculs dans `js/benefits.js`.
+
+| Règle 2026 | Source | Dans l'application |
+|---|---|---|
+| Plafond d'utilisation : 25 € par jour | [jechange.fr](https://www.jechange.fr/banques/news/tickets-restaurant-supermarche-prolonges-2027-perennises-2028-plafond-25-euros), [mes-allocs.fr](https://www.mes-allocs.fr/actualites/aides-sociales/gouvernement-ticket-restaurant/) | Avertissement dans le formulaire si les paiements du jour dépassent 25 €. |
+| Courses non directement consommables acceptées jusqu'au 31 décembre 2026. L'Assemblée a voté le 12 octobre 2026 une prolongation pour 2027, puis une autorisation définitive à partir de 2028 ; le Sénat doit encore se prononcer. | [jechange.fr](https://www.jechange.fr/banques/news/tickets-restaurant-supermarche-prolonges-2027-perennises-2028-plafond-25-euros), [Parlons Business](https://www.parlons-business-media.fr/decryptages/titres-restaurant-supermarche-vote-assemblee-octobre-2026), [mes-allocs.fr](https://www.mes-allocs.fr/actualites/aides-sociales/gouvernement-ticket-restaurant/) | Date réglable (`MEAL_VOUCHERS.groceriesUntil`). Après cette date, les courses ne sont plus proposées en titres-restaurant. |
+| L'employeur paie de 50 à 60 % du titre ; sa part est exonérée jusqu'à 7,32 € par titre en 2026 | [Éditions Tissot](https://www.editions-tissot.fr/actualite/droit-du-travail/titre-restaurant), [les-aides.fr (URSSAF)](https://les-aides.fr/aide/V4k_3w/urssaf/exoneration-sur-les-cotisations-de-securite-sociale-pour-l-attribution-de-titres-restaurants.html) | Le compte calcule le crédit mensuel, la part de l'employeur et la part déjà retenue sur le salaire. |
+| Validité : l'année civile, plus janvier et février de l'année suivante. Sur carte, le solde est en général reporté automatiquement ; le report peut être demandé jusqu'au 15 mars. | [Previssima](https://www.previssima.fr/actualite/tickets-restaurant-2025-le-guide-pour-ne-pas-perdre-votre-solde-apres-fevrier.html), [Sud Radio](https://www.sudradio.fr/societe/titres-restaurant-que-faire-avant-leur-expiration-fin-fevrier) | Date limite affichée sur le compte, conseil en janvier et février. |
+| CESU préfinancés : utilisables jusqu'au 31 janvier de l'année suivante, notamment pour la crèche et l'assistante maternelle | [IRCEM](https://www.ircem.com/actualites/documents/tout-savoir-sur-le-paiement-par-cesu-papier-en-2026/), [Assemblée nationale, QE 32398](https://www.assemblee-nationale.fr/dyn/14/questions/QANR5L14QE32398.pdf) | Catégories « Enfants » et « Maison », date limite affichée. |
+
+**Dans l'application.**
+- Le crédit mensuel est enregistré automatiquement comme revenu dans la catégorie « Titres-restaurant & avantages ». Il est compté dans les revenus, car le salaire net versé est déjà diminué de votre part.
+- **Paiement partagé** : pour des courses ou un repas payés en partie en titres, le champ « Dont payé en titres-restaurant » crée deux opérations, une sur la carte de titres et une sur le compte bancaire.
+- Le **disponible à dépenser** (tableau de bord, Optimisation) et la page Budgets indiquent le solde des titres en plus de la trésorerie bancaire. Ce solde n'est pas mélangé à la trésorerie : il ne paie pas le loyer.
+- Un conseil invite à régler des courses en titres quand des courses sont payées par carte alors qu'un solde de titres attend. Il rappelle aussi les échéances (fin de la dérogation pour les courses, fin février).
+- En couple, la carte a un titulaire : des courses communes payées en titres comptent comme payées par lui.
+
+## 12. Limites
 
 - Les conseils sont indicatifs et ne remplacent pas un conseiller financier.
 - Les taux et plafonds sont datés (`REFERENCE.ratesDate`) et doivent être mis à jour à chaque révision.

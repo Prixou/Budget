@@ -6,7 +6,33 @@ export const ACCOUNT_TYPES = {
   especes: { label: 'Espèces', icon: 'cash' },
   carte: { label: 'Carte de crédit', icon: 'card' },
   investissement: { label: 'Investissement', icon: 'chart' },
+  avantages: { label: 'Titres-restaurant, chèques…', icon: 'ticket' },
   autre: { label: 'Autre', icon: 'wallet' },
+};
+
+/**
+ * Avantages salariés crédités sur une carte ou en titres, utilisables pour certaines dépenses seulement.
+ * categories : catégories de dépenses acceptées ; expires : fin de validité du solde de l'année.
+ */
+export const BENEFITS = {
+  restaurant: { label: 'Titres-restaurant', use: 'repas et courses alimentaires', categories: ['cat-restaurants', 'cat-courses'], expires: '02-end' },
+  cesu: { label: 'CESU préfinancés', use: 'garde d’enfants, ménage, services à domicile', categories: ['cat-enfants', 'cat-maison'], expires: '01-31' },
+  vacances: { label: 'Chèques-vacances', use: 'vacances, loisirs, transport, restaurants', categories: ['cat-voyages', 'cat-loisirs', 'cat-transport', 'cat-restaurants', 'cat-sport'], expires: null },
+  cadeaux: { label: 'Chèques ou cartes cadeaux', use: 'achats dans les enseignes acceptées', categories: ['cat-shopping', 'cat-cadeaux', 'cat-loisirs', 'cat-courses'], expires: null },
+};
+
+/**
+ * Titres-restaurant : règles 2026 (sources dans docs/RECHERCHE.md).
+ * Les courses non directement consommables (pâtes, farine…) sont acceptées jusqu'au 31 décembre 2026 ;
+ * l'Assemblée a voté le 12 octobre 2026 une prolongation pour 2027, que le Sénat doit encore examiner.
+ */
+export const MEAL_VOUCHERS = {
+  date: '2026-10-20',
+  dailyCap: 2500, // 25 € par jour
+  groceriesUntil: '2026-12-31',
+  employerShare: { min: 50, max: 60 }, // part de l'employeur, en % de la valeur du titre
+  employerExemptionMax: 732, // part patronale exonérée de cotisations, par titre (2026)
+  carryOverRequest: '03-15', // report du solde sur carte : à demander au plus tard le 15 mars
 };
 
 /**
@@ -177,6 +203,7 @@ export function defaultCategories() {
     ['cat-primes', 'Primes', '🎉', '#eda100'],
     ['cat-freelance', 'Activité indépendante', '💻', '#4a3aa7'],
     ['cat-aides', 'Aides & allocations', '🤝', '#1baf7a'],
+    ['cat-avantages', 'Titres-restaurant & avantages', '🎟️', '#eb6834'],
     ['cat-locatif', 'Revenus locatifs', '🏘️', '#0f8b8d'],
     ['cat-placements', 'Intérêts & dividendes', '📈', '#008300'],
     ['cat-remboursements', 'Remboursements', '↩️', '#eb6834'],

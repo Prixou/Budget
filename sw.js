@@ -15,6 +15,7 @@ const ASSETS = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'js/app.js',
+  'js/benefits.js',
   'js/calc.js',
   'js/charts.js',
   'js/components.js',

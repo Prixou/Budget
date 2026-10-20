@@ -133,6 +133,7 @@ export default {
           <div class="hero-meta">
             <span>Fin de mois prévue : <strong class="money">${formatMoney(forecast.forecast)}</strong></span>
             ${cash.accounts.length ? html`<span>Disponible à dépenser : <strong class="money">${formatMoney(cash.available, { decimals: false })}</strong> (${formatMoney(cash.perDay, { decimals: false })} / jour)</span>` : ''}
+            ${cash.benefits.total ? html`<span>${icon('ticket', { size: 14 })} <strong class="money">${formatMoney(cash.benefits.total, { decimals: false })}</strong> en ${cash.benefits.meal === cash.benefits.total ? 'titres-restaurant (repas et courses)' : 'titres et chèques'}</span>` : ''}
             ${worth.debts ? html`<span>Crédits restants : <strong class="money">${formatMoney(worth.debts)}</strong></span>` : ''}
             ${worth.debts ? html`<span>Patrimoine net : <strong class="money">${formatMoney(worth.net)}</strong></span>` : ''}
           </div>
