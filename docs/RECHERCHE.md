@@ -214,4 +214,5 @@ Un compte de type « Titres-restaurant, chèques… » suit une carte ou un carn
 - Les taux et plafonds sont datés (`REFERENCE.ratesDate`) et doivent être mis à jour à chaque révision.
 - La prévision de trésorerie ignore par défaut les revenus variables (case à cocher pour les inclure).
 - La détection d'abonnements ne voit que ce qui passe par vos comptes : un abonnement payé via un magasin d'applications apparaît sous le nom du magasin.
+- Les budgets proposés par l'assistant de démarrage sont un point de départ, pas une norme. Ils reprennent une part de ce qui reste après les charges fixes et l'épargne, avec un plafond par adulte (par exemple 300 € de courses), puis s'ajustent avec les vraies dépenses (bouton « Suggérer » des budgets).
 - Les droits aux aides familiales sont des estimations : seule la CAF les calcule (situation, ressources exactes, date de déclaration de grossesse). Le revenu fiscal de référence est estimé à 90 % des revenus nets annuels s'il n'est pas saisi. Le CMG et la PreParE sont simplifiés ou non calculés.

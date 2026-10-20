@@ -14,6 +14,7 @@ import categories from './views/categories.js';
 import couple from './views/couple.js';
 import dashboard from './views/dashboard.js';
 import debts from './views/debts.js';
+import demarrage from './views/demarrage.js';
 import goals from './views/goals.js';
 import optimisation from './views/optimisation.js';
 import recurring from './views/recurring.js';
@@ -22,14 +23,14 @@ import settings from './views/settings.js';
 import tools from './views/tools.js';
 import transactions from './views/transactions.js';
 
-const VIEWS = [dashboard, transactions, budgets, accounts, recurring, goals, debts, couple, bebe, optimisation, reports, tools, categories, settings];
+const VIEWS = [dashboard, transactions, budgets, accounts, recurring, goals, debts, couple, bebe, optimisation, reports, tools, categories, settings, demarrage];
 const BY_ID = new Map(VIEWS.map((v) => [v.id, v]));
 const NAV = [
   ['Suivi', ['tableau-de-bord', 'transactions', 'budgets', 'comptes']],
   ['Planifier', ['recurrentes', 'objectifs', 'dettes']],
   ['Famille', ['couple', 'bebe']],
   ['Analyser', ['optimisation', 'rapports', 'simulateurs']],
-  ['Réglages', ['categories', 'parametres']],
+  ['Réglages', ['parametres']],
 ];
 const TABS = ['tableau-de-bord', 'transactions', 'budgets', 'optimisation'];
 const MONTH_VIEWS = new Set(['tableau-de-bord', 'budgets', 'transactions']);
@@ -81,7 +82,7 @@ function navLink(id, { tab = false } = {}) {
 }
 
 function shortTitle(view) {
-  return { 'tableau-de-bord': 'Accueil', transactions: 'Opérations' }[view.id] || view.title;
+  return { 'tableau-de-bord': 'Accueil', transactions: 'Opérations', demarrage: 'Démarrage' }[view.id] || view.title;
 }
 
 function renderShell() {
@@ -108,11 +109,13 @@ function renderBanners() {
     ${store.saveFailed && storageOk
       ? html`<div class="banner banner-warning">${icon('alert')}<p>Le dernier enregistrement a échoué (espace de stockage plein ?). Exportez une sauvegarde depuis les paramètres pour ne rien perdre.</p></div>`
       : ''}
-    ${s.demo
-      ? html`<div class="banner" role="status">${icon('sparkle')}<p><strong>Données d'exemple.</strong> Explorez librement l'application : tout ce que vous voyez est fictif.</p><button type="button" class="btn btn-primary btn-sm" id="banner-start">Commencer avec mes données</button></div>`
-      : backupDue(s)
-        ? html`<div class="banner" role="status">${icon('download')}<p><strong>${s.lastBackup ? `Dernière sauvegarde il y a ${daysBetween(s.lastBackup, todayISO())} jours.` : 'Aucune sauvegarde de vos données.'}</strong> Elles ne sont enregistrées que dans ce navigateur : une sauvegarde régulière évite de tout perdre.</p><button type="button" class="btn btn-primary btn-sm" id="banner-backup">Sauvegarder</button><button type="button" class="btn btn-ghost btn-sm" id="banner-later">Plus tard</button></div>`
-        : ''}`);
+    ${current.view.id === 'demarrage'
+      ? ''
+      : s.demo
+        ? html`<div class="banner" role="status">${icon('sparkle')}<p><strong>Données d'exemple.</strong> Explorez librement l'application : tout ce que vous voyez est fictif.</p><button type="button" class="btn btn-primary btn-sm" id="banner-start">Créer mon budget (3 min)</button></div>`
+        : backupDue(s)
+          ? html`<div class="banner" role="status">${icon('download')}<p><strong>${s.lastBackup ? `Dernière sauvegarde il y a ${daysBetween(s.lastBackup, todayISO())} jours.` : 'Aucune sauvegarde de vos données.'}</strong> Elles ne sont enregistrées que dans ce navigateur : une sauvegarde régulière évite de tout perdre.</p><button type="button" class="btn btn-primary btn-sm" id="banner-backup">Sauvegarder</button><button type="button" class="btn btn-ghost btn-sm" id="banner-later">Plus tard</button></div>`
+          : ''}`);
   el.hidden = !el.innerHTML.trim();
   el.querySelector('#banner-start')?.addEventListener('click', () => openStartFresh());
   el.querySelector('#banner-backup')?.addEventListener('click', () => {
@@ -205,7 +208,7 @@ function applySettings() {
 /* ------------------------------------------------------------------ */
 
 function openMoreSheet() {
-  const ids = VIEWS.map((v) => v.id).filter((id) => !TABS.includes(id));
+  const ids = VIEWS.filter((v) => !v.hidden && v.id !== 'categories').map((v) => v.id).filter((id) => !TABS.includes(id));
   openModal({
     title: 'Toutes les rubriques',
     size: 'sm',

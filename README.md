@@ -9,14 +9,21 @@ Application web complète pour gérer son budget : suivi des dépenses et des re
 - **Hors ligne et installable** : application web progressive (PWA), utilisable sur ordinateur et sur mobile.
 - **En français**, avec les usages français : montants au format `1 234,56 €`, relevés bancaires CSV avec `;`, taux d'endettement de 35 %, pointage des opérations.
 
-À la première ouverture, un jeu de **données d'exemple** (8 mois d'historique d'un couple qui attend un bébé) est chargé pour découvrir l'application. Le bouton « Commencer avec mes données » les efface et crée votre premier compte.
+À la première ouverture, un jeu de **données d'exemple** (8 mois d'historique d'un couple qui attend un bébé) est chargé pour découvrir l'application. Le bouton « Créer mon budget (3 min) » lance l'**assistant de démarrage** :
+
+1. **Votre foyer** : seul ou à deux, prénoms, revenus, jour de paie.
+2. **Vos comptes** : compte courant ou joint, comptes personnels, livret, titres-restaurant.
+3. **Charges fixes** : loyer, énergie, internet, assurances… et l'épargne automatique.
+4. **Budgets** : une proposition par poste, calculée sur ce qui reste après les charges fixes, à ajuster.
+
+L'assistant crée les comptes, les revenus et prélèvements récurrents et les budgets. Le tableau de bord affiche ensuite les étapes restantes (« Pour bien démarrer ») avec un bouton pour chacune.
 
 ## Fonctionnalités
 
 | Rubrique | Ce qu'elle permet |
 |---|---|
 | **Tableau de bord** | Solde total, prévision de fin de mois, revenus / dépenses / reste à vivre / taux d'épargne du mois avec comparaison au mois précédent, alertes (budget dépassé, compte à découvert), graphique sur 6 mois, dépenses par catégorie, rythme des dépenses (moyenne par jour, projection), budgets, échéances à venir, dernières opérations, objectifs. |
-| **Opérations** | Dépenses, revenus et virements entre comptes. Paiement partagé entre titres-restaurant et carte bancaire. Recherche (sans tenir compte des accents), filtres (période, type, compte, catégorie, pointage, étiquette), tri, sélection multiple (pointer, changer de catégorie, supprimer), duplication, étiquettes, notes. Le libellé mémorise la catégorie utilisée la dernière fois. Import d'un relevé CSV et export CSV. |
+| **Opérations** | Dépenses, revenus et virements entre comptes. Saisie rapide : montant, puis un clic sur l'une des catégories les plus utilisées (étiquettes, notes et répétition sont repliées dans « Plus d'options »). Paiement partagé entre titres-restaurant et carte bancaire. Recherche (sans tenir compte des accents), filtres (période, type, compte, catégorie, pointage, étiquette), tri, sélection multiple (pointer, changer de catégorie, supprimer), duplication, étiquettes, notes. Le libellé mémorise la catégorie utilisée la dernière fois. Import d'un relevé CSV et export CSV. |
 | **Budgets** | Plafond mensuel par catégorie, valable tous les mois ou pour un seul mois, avec **report du reste** (ou du dépassement) sur le mois suivant. États « dans le budget », « bientôt atteint » (seuil réglable), « consommé », « dépassé ». Suggestions calculées d'après vos 3 derniers mois. Montant des revenus restant à affecter. |
 | **Comptes** | Compte courant, épargne (Livret A, LDDS, LEP, PEL… avec taux, intérêts estimés et plafond), espèces, carte de crédit, investissement, **titres-restaurant, CESU, chèques-vacances ou cadeaux** (crédit mensuel automatique, part de l'employeur, plafond de 25 € par jour, date limite du solde). Solde, solde pointé, évolution sur 12 mois, patrimoine net (dettes déduites). **Rapprochement bancaire** : saisissez le solde de votre relevé, l'écart est corrigé automatiquement. Comptes clôturés conservés dans l'historique. |
 | **Récurrences** | Salaire, loyer, abonnements, virements d'épargne… de quotidien à annuel, avec date de fin facultative. Enregistrement automatique à l'échéance ou validation manuelle. Charges fixes mensuelles, coût annuel des abonnements, calendrier des 45 prochains jours, mise en pause. |
@@ -27,7 +34,7 @@ Application web complète pour gérer son budget : suivi des dépenses et des re
 | **Optimisation** | Score de santé financière sur 100 (4 piliers inspirés du FinHealth Score : dépenser, épargner, emprunter, planifier). Conseils classés par priorité avec le gain annuel estimé et une action en un clic, par exemple : argent qui dort sur le compte courant (gain sur Livret A ou LEP, perte due à l'inflation), épargne de précaution, frais bancaires, abonnements, hausses de dépenses, dépenses inhabituelles, budgets irréalistes, épargne automatique, remboursement anticipé, renégociation, assurance emprunteur. Prévision de trésorerie sur 90 jours avec point bas, « disponible à dépenser » d'ici la fin du mois, détection automatique des paiements récurrents non suivis. |
 | **Rapports** | Toute période (mois, trimestre, année, personnalisée) et tout compte : revenus / dépenses par mois, solde mensuel (excédent ou déficit), évolution du solde, répartition par catégorie avec évolution par rapport à la période précédente, règle 50/30/20, plus grosses dépenses, étiquettes, tableau mensuel. Export CSV. |
 | **Simulateurs** | Prêt (mensualité, coût, assurance, amortissement), remboursement anticipé (indemnités légales, intérêts économisés, comparaison avec un Livret A), capacité d'emprunt (35 % d'endettement), épargne à intérêts composés (taux 2026 en un clic, inflation), objectif d'épargne, règle 50/30/20 comparée à vos dépenses réelles, fonds d'urgence. Préremplis avec vos propres moyennes. |
-| **Catégories** | 32 catégories par défaut, modifiables : icône, couleur, groupe « besoins / envies / épargne ». À la suppression, les opérations sont déplacées vers la catégorie de votre choix. |
+| **Catégories** (depuis Paramètres) | 32 catégories par défaut, modifiables : icône, couleur, groupe « besoins / envies / épargne ». À la suppression, les opérations sont déplacées vers la catégorie de votre choix. |
 | **Paramètres** | Devise, thème clair / sombre / automatique, seuil d'alerte des budgets, mode discret (montants floutés), sauvegarde et restauration (JSON), remise à zéro. |
 
 Autres détails : annulation après chaque suppression, raccourcis clavier (`N` nouvelle opération, `/` recherche, `←` `→` changer de mois, `G` puis `T`/`O`/`B`/`C`/`R` pour naviguer), graphiques accessibles au clavier avec info-bulles, affichage adapté au mobile avec barre d'onglets.
@@ -71,6 +78,7 @@ js/app.js               démarrage, navigation, raccourcis
 js/store.js             état, persistance, actions (ajout, suppression, annulation…)
 js/calc.js              calculs purs : soldes, budgets, récurrences, crédits, épargne (avec cache)
 js/insights.js          moteur d'optimisation : score, conseils, prévision, détection, stratégies
+js/setup.js             assistant de démarrage : construit comptes, récurrences et budgets à partir des réponses
 js/family.js            couple (partage, équilibre, prévision) et plan bébé (congés, aides, garde)
 js/benefits.js          titres-restaurant et avantages : soldes, règles d'utilisation, échéances
 js/csv.js               lecture / écriture CSV, import de relevés

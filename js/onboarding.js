@@ -1,14 +1,24 @@
-// Démarrage : quitter les données d'exemple et créer son premier compte.
+// Démarrage : quitter les données d'exemple, avec l'assistant ou un simple compte courant.
 import { CURRENCIES } from './defaults.js';
 import { amountField } from './forms.js';
 import { requestPersistence, startFresh, store } from './store.js';
 import { fieldError, formValues, icon, openModal, options, toast } from './ui.js';
 import { html, parseAmount } from './utils.js';
 
+/** Depuis les données d'exemple : l'assistant. Depuis des données réelles : confirmation avant d'effacer. */
 export function openStartFresh() {
+  if (store.state.settings.demo) {
+    location.hash = '#demarrage';
+    return;
+  }
+  openMinimalStart();
+}
+
+/** Repartir avec un seul compte courant, sans assistant. */
+export function openMinimalStart() {
   const demo = store.state.settings.demo;
   openModal({
-    title: demo ? 'Commencer avec mes données' : 'Tout effacer',
+    title: demo ? 'Commencer avec un compte courant' : 'Tout effacer',
     size: 'sm',
     body: html`<form class="form" id="fresh-form" novalidate>
       <div class="callout ${demo ? '' : 'callout-danger'}">${icon(demo ? 'info' : 'alert')}<div>${demo
@@ -21,8 +31,13 @@ export function openStartFresh() {
         store.state.settings.currency,
       )}</select></label>
     </form>`,
-    footer: html`<button type="button" class="btn btn-ghost" data-close>Annuler</button><button type="submit" form="fresh-form" class="btn ${demo ? 'btn-primary' : 'btn-danger'}">${demo ? 'Commencer' : 'Effacer et recommencer'}</button>`,
+    footer: html`${demo ? '' : html`<button type="button" class="btn btn-ghost spacer" data-wizard>${icon('sparkle', { size: 16 })} Effacer et utiliser l’assistant</button>`}
+      <button type="button" class="btn btn-ghost" data-close>Annuler</button><button type="submit" form="fresh-form" class="btn ${demo ? 'btn-primary' : 'btn-danger'}">${demo ? 'Commencer' : 'Effacer et recommencer'}</button>`,
     onMount(el, close) {
+      el.querySelector('[data-wizard]')?.addEventListener('click', () => {
+        close();
+        location.hash = '#demarrage';
+      });
       el.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault();
         const f = formValues(e.target);

@@ -267,6 +267,7 @@ export function emptyState() {
       lepEligible: 'unknown', // 'yes' | 'no' | 'unknown'
       lastBackup: null,
       backupSnoozedUntil: null,
+      setupDismissed: false, // liste « Pour bien démarrer » masquée
       dismissedTips: [],
       ignoredRecurring: [],
     },

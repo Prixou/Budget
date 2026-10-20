@@ -20,9 +20,10 @@ import {
 import { chartSlot, hbars, legend, meter } from '../charts.js';
 import { catBadge, deltaText, groupedTxList, kpi, lookups, monthNav, statusPill, transferBadge } from '../components.js';
 import { cashForecast } from '../insights.js';
-import { confirmOccurrence, skipOccurrence } from '../store.js';
+import { setupChecklist } from '../setup.js';
+import { confirmOccurrence, exportData, skipOccurrence, updateSettings } from '../store.js';
 import { healthCard } from './optimisation.js';
-import { emptyState, icon, toast } from '../ui.js';
+import { emptyState, icon, offerFile, toast } from '../ui.js';
 import {
   addDays,
   capitalize,
@@ -41,6 +42,27 @@ import {
   todayISO,
 } from '../utils.js';
 
+/** « Pour bien démarrer » : les étapes de prise en main restantes, avec un bouton pour chacune. */
+function setupCard(state) {
+  if (state.settings.demo || state.settings.setupDismissed) return '';
+  const items = setupChecklist(state);
+  const done = items.filter((i) => i.done).length;
+  if (done === items.length) return '';
+  const button = (i) => {
+    if (i.id === 'tx') return html`<button type="button" class="btn btn-sm" data-action="add-tx">Saisir</button><button type="button" class="btn btn-sm" data-import>Importer</button>`;
+    if (i.id === 'backup') return html`<button type="button" class="btn btn-sm" data-setup-backup>Sauvegarder</button>`;
+    return html`<a class="btn btn-sm" href="${i.href}">Faire</a>`;
+  };
+  return html`<section class="card setup-card">
+    <div class="card-header"><div><h2>Pour bien démarrer</h2><p class="sub">${done} étape${done > 1 ? 's' : ''} sur ${items.length}</p></div>
+      <button type="button" class="icon-btn icon-btn-sm" data-setup-dismiss aria-label="Masquer ces étapes">${icon('x', { size: 16 })}</button></div>
+    ${meter(done / items.length, 'ok', 'Étapes faites')}
+    <ul class="setup-list">${items.map(
+      (i) => html`<li class="${i.done ? 'is-done' : ''}"><span class="setup-check" aria-hidden="true">${i.done ? icon('check', { size: 13 }) : ''}</span><span class="grow">${i.label}${i.done ? html`<span class="sr-only"> (fait)</span>` : ''}</span>${i.done ? '' : html`<span class="setup-actions">${button(i)}</span>`}</li>`,
+    )}</ul>
+  </section>`;
+}
+
 export default {
   id: 'tableau-de-bord',
   title: 'Tableau de bord',
@@ -55,8 +77,8 @@ export default {
       return html`<div class="card">${emptyState({
         iconName: 'wallet',
         title: 'Aucun compte pour le moment',
-        text: 'Ajoutez votre premier compte (compte courant, livret, espèces…) pour commencer à suivre votre budget.',
-        action: html`<a class="btn btn-primary" href="#comptes">${icon('plus', { size: 16 })} Ajouter un compte</a>`,
+        text: 'Répondez à quelques questions (revenus, comptes, charges fixes) : votre budget est prêt en 3 minutes.',
+        action: html`<div class="row"><a class="btn btn-primary" href="#demarrage">${icon('sparkle', { size: 16 })} Configurer mon budget</a><a class="btn" href="#comptes">Ajouter un compte</a></div>`,
       })}</div>`;
     }
 
@@ -125,6 +147,7 @@ export default {
         ${monthNav(month)}
         <button type="button" class="btn btn-primary desktop-only-btn" data-action="add-tx">${icon('plus', { size: 16 })} Nouvelle opération</button>
       </div>
+      ${setupCard(state)}
 
       <section class="card hero" aria-label="Synthèse">
         <div class="hero-balance">
@@ -285,6 +308,11 @@ export default {
   },
 
   mount(root, { state }) {
+    root.querySelector('[data-setup-dismiss]')?.addEventListener('click', () => updateSettings({ setupDismissed: true }));
+    root.querySelector('[data-setup-backup]')?.addEventListener('click', () => {
+      offerFile(`budget-sauvegarde-${todayISO()}.json`, exportData(), 'application/json');
+      updateSettings({ lastBackup: todayISO() });
+    });
     // Les conseils sont calculés après l'affichage, pendant un temps mort : l'écran répond tout de suite.
     const slot = root.querySelector('#health-slot');
     if (slot) {

@@ -2765,3 +2765,261 @@ kbd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Prise en main : assistant, étapes, formulaire allégé                */
+/* ------------------------------------------------------------------ */
+
+.chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.cat-chips {
+  margin-top: -4px;
+}
+
+.cat-chips:empty,
+.cat-chips[hidden] {
+  display: none;
+}
+
+.more-options > .stack-v {
+  margin-top: 12px;
+}
+
+.wizard {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wizard-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  counter-reset: none;
+}
+
+.wizard-steps li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+  position: relative;
+}
+
+/* Trait entre les étapes */
+.wizard-steps li + li::before {
+  content: '';
+  position: absolute;
+  top: 13px;
+  right: calc(50% + 16px);
+  width: calc(100% - 32px);
+  height: 2px;
+  background: var(--border);
+}
+
+.wizard-steps li.is-done + li::before,
+.wizard-steps li.is-done::before {
+  background: var(--accent);
+}
+
+.wizard-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+  background: var(--surface-3);
+  color: var(--fg-2);
+}
+
+.wizard-steps .is-current .wizard-dot,
+.wizard-steps .is-done .wizard-dot {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.wizard-steps .is-current {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.wizard-nav {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.wiz-option {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin: 0;
+  min-width: 0;
+}
+
+.wiz-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.wiz-option-body[hidden] {
+  display: none;
+}
+
+.fixed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fixed-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 110px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.fixed-row-2 {
+  grid-template-columns: minmax(0, 1fr) 130px;
+}
+
+.fixed-row + .fixed-row {
+  border-top: 1px solid var(--border);
+}
+
+.fixed-row label {
+  font-size: 0.92rem;
+}
+
+.fixed-saving {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.wiz-total {
+  margin: 0;
+  font-weight: 600;
+}
+
+.recap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recap li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.recap .icon {
+  color: var(--accent);
+  flex: none;
+  margin-top: 2px;
+}
+
+.setup-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 20px;
+}
+
+.setup-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 0.92rem;
+}
+
+.setup-list li.is-done {
+  color: var(--muted);
+}
+
+.setup-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.is-done .setup-check {
+  border-color: var(--good);
+  background: var(--good);
+  color: #fff;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+@media (max-width: 760px) {
+  .setup-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .wizard-label {
+    display: none;
+  }
+
+  .wizard-steps .is-current .wizard-label {
+    display: block;
+    position: absolute;
+    top: 32px;
+    white-space: nowrap;
+  }
+
+  .wizard-steps {
+    padding-bottom: 18px;
+  }
+
+  .fixed-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .fixed-row label {
+    grid-column: 1 / -1;
+  }
+
+  .fixed-row-2 {
+    grid-template-columns: minmax(0, 1fr) 120px;
+  }
+
+  .fixed-row-2 label {
+    grid-column: auto;
+  }
+}

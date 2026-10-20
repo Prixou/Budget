@@ -34,6 +34,7 @@ export default {
             <span class="hint">Un budget passe en « bientôt atteint » au-delà de ce seuil.</span>
           </label>
           <label class="check"><input type="checkbox" id="set-privacy" ${s.privacy ? raw('checked') : ''}><span>Mode discret <span class="muted">(montants floutés, visibles au survol)</span></span></label>
+          <div class="row"><a class="btn" href="#categories">${icon('tag', { size: 16 })} Gérer les catégories</a></div>
         </section>
 
         <section class="card stack-v">

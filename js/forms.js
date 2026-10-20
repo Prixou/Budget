@@ -1,6 +1,6 @@
 // Formulaire d'opération (dépense, revenu, virement), partagé par toutes les vues.
 import { benefitAccepts, benefitBalances, benefitKind, isBenefit, spentOn } from './benefits.js';
-import { FREQUENCIES, descriptionMemory } from './calc.js';
+import { FREQUENCIES, descriptionMemory, transactionsByDate } from './calc.js';
 import { BENEFITS, MEAL_VOUCHERS } from './defaults.js';
 import { deleteTransactions, processRecurring, saveRecurring, saveTransaction, store } from './store.js';
 import { accountOptions, categoryOptions, confirmDialog, fieldError, formValues, icon, openModal, options, toast } from './ui.js';
@@ -144,6 +144,23 @@ function bindBenefitHints(form, state, { editing, txId, meals }) {
   return update;
 }
 
+/** Catégories les plus utilisées récemment pour ce type d'opération (raccourcis du formulaire). */
+function frequentCategories(state, type, limit = 6) {
+  const counts = new Map();
+  const list = transactionsByDate(state);
+  for (let i = list.length - 1, seen = 0; i >= 0 && seen < 400; i--) {
+    const tx = list[i];
+    if (tx.type !== type || !tx.categoryId) continue;
+    seen++;
+    counts.set(tx.categoryId, (counts.get(tx.categoryId) || 0) + 1);
+  }
+  const cats = new Map(state.categories.map((c) => [c.id, c]));
+  const ids = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  // Sans historique : les catégories les plus courantes.
+  const fallback = type === 'income' ? ['cat-salaire', 'cat-aides', 'cat-remboursements'] : ['cat-courses', 'cat-restaurants', 'cat-transport', 'cat-loisirs', 'cat-shopping', 'cat-sante'];
+  return [...new Set([...ids, ...fallback])].map((id) => cats.get(id)).filter((c) => c && c.type === type).slice(0, limit);
+}
+
 /**
  * Ouvre le formulaire d'opération.
  * tx : opération existante (modification) ; defaults : valeurs initiales pour une nouvelle.
@@ -186,6 +203,7 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
       )}
     </div>
     ${amountField({ value: v.amount, big: true })}
+    <div class="chips cat-chips" data-cat-chips data-show="expense income" role="group" aria-label="Catégories fréquentes"></div>
     <label class="field">
       <span>Libellé</span>
       <input class="input" name="description" id="f-description" list="desc-suggestions" autocomplete="off" maxlength="120" placeholder="Ex. : Supermarché, Loyer, Salaire…" value="${v.description}">
@@ -214,25 +232,30 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
     <p class="hint benefit-hint" data-benefit-hint hidden></p>
     ${voucherFields(meals)}
     ${shareField(state, v.share || defaultShare(state, v.accountId, v.categoryId))}
-    <label class="field">
-      <span>Étiquettes</span>
-      <input class="input" name="tags" id="f-tags" autocomplete="off" placeholder="vacances, travail… (séparées par des virgules)" value="${(v.tags || []).join(', ')}">
-    </label>
-    <label class="field">
-      <span>Notes</span>
-      <textarea class="input" name="notes" id="f-notes" rows="2" maxlength="500">${v.notes}</textarea>
-    </label>
-    <label class="check"><input type="checkbox" name="cleared" id="f-cleared" ${v.cleared ? raw('checked') : ''}><span>Opération pointée <span class="muted">(vérifiée sur le relevé bancaire)</span></span></label>
-    ${editing
-      ? ''
-      : html`<label class="check"><input type="checkbox" name="repeat" id="f-repeat"><span>Répéter automatiquement cette opération</span></label>
-        <label class="field" data-repeat hidden>
-          <span>Fréquence</span>
-          <select class="select" name="frequency" id="f-frequency">${options(
-            Object.entries(FREQUENCIES).map(([value, f]) => ({ value, label: f.label })),
-            'monthly',
-          )}</select>
-        </label>`}
+    <details class="disclosure more-options" ${(v.tags || []).length || v.notes ? raw('open') : ''}>
+      <summary>Plus d’options ${icon('down', { size: 14 })}</summary>
+      <div class="stack-v">
+        <label class="field">
+          <span>Étiquettes</span>
+          <input class="input" name="tags" id="f-tags" autocomplete="off" placeholder="vacances, travail… (séparées par des virgules)" value="${(v.tags || []).join(', ')}">
+        </label>
+        <label class="field">
+          <span>Notes</span>
+          <textarea class="input" name="notes" id="f-notes" rows="2" maxlength="500">${v.notes}</textarea>
+        </label>
+        <label class="check"><input type="checkbox" name="cleared" id="f-cleared" ${v.cleared ? raw('checked') : ''}><span>Opération pointée <span class="muted">(vérifiée sur le relevé bancaire)</span></span></label>
+        ${editing
+          ? ''
+          : html`<label class="check"><input type="checkbox" name="repeat" id="f-repeat"><span>Répéter automatiquement cette opération</span></label>
+            <label class="field" data-repeat hidden>
+              <span>Fréquence</span>
+              <select class="select" name="frequency" id="f-frequency">${options(
+                Object.entries(FREQUENCIES).map(([value, f]) => ({ value, label: f.label })),
+                'monthly',
+              )}</select>
+            </label>`}
+      </div>
+    </details>
   </form>`;
 
   const footer = html`${editing
@@ -251,6 +274,21 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
       const catSelect = form.elements.categoryId;
       let categoryTouched = !!v.categoryId;
 
+      const chips = form.querySelector('[data-cat-chips]');
+      const renderChips = (type) => {
+        if (type === 'transfer') return;
+        chips.innerHTML = String(
+          html`${frequentCategories(store.state, type).map(
+            (c) => html`<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${catSelect.value === c.id ? 'true' : 'false'}"><span aria-hidden="true">${c.icon}</span> ${c.name}</button>`,
+          )}`,
+        );
+      };
+      chips.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-cat]');
+        if (!chip) return;
+        catSelect.value = chip.dataset.cat;
+        catSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
       const applyType = () => {
         const type = formValues(form).type;
         el.querySelectorAll('[data-show]').forEach((node) => {
@@ -260,12 +298,14 @@ export function openTransactionForm({ tx = null, defaults = {} } = {}) {
         if (type !== 'transfer') {
           const current = catSelect.value;
           catSelect.innerHTML = String(categoryOptions(store.state.categories, type, current));
+          renderChips(type);
         }
       };
       applyType();
       form.querySelectorAll('input[name=type]').forEach((r) => r.addEventListener('change', applyType));
       catSelect.addEventListener('change', () => {
         categoryTouched = true;
+        chips.querySelectorAll('[data-cat]').forEach((c) => c.setAttribute('aria-pressed', c.dataset.cat === catSelect.value ? 'true' : 'false'));
       });
       const refreshShare = bindShareField(form, store.state);
       const refreshBenefit = bindBenefitHints(form, store.state, { editing, txId: tx?.id, meals });
