@@ -2,7 +2,7 @@
 
 Application web complète pour gérer son budget : suivi des dépenses et des revenus, budgets par catégorie, comptes, opérations récurrentes, objectifs d'épargne, crédits, rapports et simulateurs financiers.
 
-- **Aucune dépendance** : HTML, CSS et JavaScript natifs (modules ES). Pas de compilation.
+- **Aucune dépendance** : HTML, CSS et JavaScript natifs (modules ES). Pas de compilation. Deux bibliothèques facultatives sont hébergées avec l'application et chargées seulement à l'usage (`vendor/`) : la lecture des captures et le SDK de Claude.
 - **Vos données restent chez vous** : tout est enregistré dans le navigateur (IndexedDB), rien n'est envoyé sur un serveur.
 - **En couple et en famille** : partage des dépenses communes, équilibre entre vous deux, et plan pour l'arrivée d'un bébé ou de jumeaux (congés, aides de la CAF, garde, achats).
 - **Des conseils chiffrés** : score de santé financière, abonnements oubliés, argent qui dort, prévision de trésorerie, stratégies de remboursement. Ils s'appuient sur les taux et règles en vigueur en France en 2026 (voir [docs/RECHERCHE.md](docs/RECHERCHE.md)).
@@ -31,6 +31,7 @@ L'assistant crée les comptes, les revenus et prélèvements récurrents et les 
 | **Crédits** | Suivi des prêts (immobilier, auto, consommation…) : mensualité, capital restant dû, intérêts payés et restants, coût total, tableau d'amortissement, taux d'endettement. Comparaison des stratégies « avalanche » et « boule de neige » avec un effort mensuel supplémentaire. |
 | **Couple** | Prénoms, revenus et règle de partage (au prorata des revenus, 50/50 ou pourcentage choisi). Chaque compte a un titulaire (commun ou personnel) et chaque dépense est « commune » ou pour l'un de vous. Équilibre « qui doit combien à qui », remboursements, part de chacun dans les dépenses communes, budget commun prévu sur 12 mois avec le versement et le « reste pour soi » de chacun, y compris pendant les congés liés à la naissance. Filtre « Pour qui » dans les opérations. |
 | **Bébé** | Plan d'arrivée d'un bébé ou de jumeaux, avec comparaison des deux tant que ce n'est pas confirmé : somme à mettre de côté avant la naissance, coût net de la première année, calendrier (congés maternité, paternité et de naissance, prime, début de la garde), projection mois par mois, baisse de revenus pendant les congés, aides de la CAF (prime, allocation de base, allocations familiales, CMG), crédit d'impôt, crèche ou assistante maternelle, liste d'achats à cocher. Un clic crée l'objectif d'épargne, les récurrences et le budget « Enfants ». Règles et barèmes 2026. |
+| **Assistant** (facultatif) | Questions en langage courant (« Combien a-t-on dépensé en restaurants ce mois-ci ? », « Où puis-je économiser ? ») avec Claude Haiku 5.5, le modèle le plus économique d'Anthropic. L'assistant appelle des calculs locaux (synthèse du mois, catégories, recherche, budgets, comptes, charges fixes, objectifs, famille, conseils) : seuls leurs résultats sont envoyés. Lecture des captures d'écran par Claude, plus fiable que la lecture sur l'appareil. Clé API personnelle, gardée dans le navigateur ; plafond de dépense mensuel et compteur dans Paramètres. |
 | **Optimisation** | Score de santé financière sur 100 (4 piliers inspirés du FinHealth Score : dépenser, épargner, emprunter, planifier). Conseils classés par priorité avec le gain annuel estimé et une action en un clic, par exemple : argent qui dort sur le compte courant (gain sur Livret A ou LEP, perte due à l'inflation), épargne de précaution, frais bancaires, abonnements, hausses de dépenses, dépenses inhabituelles, budgets irréalistes, épargne automatique, remboursement anticipé, renégociation, assurance emprunteur. Prévision de trésorerie sur 90 jours avec point bas, « disponible à dépenser » d'ici la fin du mois, détection automatique des paiements récurrents non suivis. |
 | **Rapports** | Toute période (mois, trimestre, année, personnalisée) et tout compte : revenus / dépenses par mois, solde mensuel (excédent ou déficit), évolution du solde, répartition par catégorie avec évolution par rapport à la période précédente, règle 50/30/20, plus grosses dépenses, étiquettes, tableau mensuel. Export CSV. |
 | **Simulateurs** | Prêt (mensualité, coût, assurance, amortissement), remboursement anticipé (indemnités légales, intérêts économisés, comparaison avec un Livret A), capacité d'emprunt (35 % d'endettement), épargne à intérêts composés (taux 2026 en un clic, inflation), objectif d'épargne, règle 50/30/20 comparée à vos dépenses réelles, fonds d'urgence. Préremplis avec vos propres moyennes. |
@@ -65,6 +66,14 @@ Dans **Opérations**, bouton image (ou collez une capture avec `Ctrl+V` n'import
 
 La lecture se fait **sur votre appareil** avec [Tesseract.js](https://github.com/naptha/tesseract.js) (dossier `vendor/tesseract`) : l'image n'est envoyée nulle part. Le moteur (environ 5 Mo) est téléchargé à la première utilisation puis fonctionne hors ligne. Les captures en mode sombre sont prises en charge ; vérifiez toujours les montants, surtout ceux encadrés (signe non lisible).
 
+### Activer l'assistant IA
+
+1. Créez un compte sur [platform.claude.com](https://platform.claude.com), ajoutez quelques dollars de crédit et fixez une limite de dépense.
+2. Créez une clé API (menu « API Keys »).
+3. Dans **Paramètres → Intelligence artificielle**, collez la clé : elle est vérifiée sans frais, puis gardée dans ce navigateur uniquement, jamais dans les sauvegardes.
+
+Coût indicatif avec Claude Haiku 5.5 (0,10 $ par million de jetons lus, 0,50 $ écrits) : environ 0,1 à 0,2 centime de dollar par question et 0,05 centime par capture. Pécule estime la dépense du mois et bloque les demandes au-delà du plafond choisi (1 $ par défaut). Sans clé, tout le reste de l'application fonctionne sans rien envoyer.
+
 ### Importer un relevé bancaire
 
 Dans **Opérations**, bouton d'import (flèche vers le haut) : choisissez le fichier CSV exporté depuis votre banque. Le séparateur (`;`, `,`, tabulation), l'encodage (UTF-8 ou Windows-1252) et les colonnes (date, libellé, montant ou débit / crédit) sont détectés automatiquement et restent modifiables. Un aperçu signale les doublons probables, et les catégories sont retrouvées à partir de vos opérations passées.
@@ -90,6 +99,9 @@ js/benefits.js          titres-restaurant et avantages : soldes, règles d'utili
 js/csv.js               lecture / écriture CSV, import de relevés
 js/capture.js           captures d'écran bancaires : dates, libellés, montants, catégories (analyse du texte)
 js/ocr.js               lecture du texte d'une image sur l'appareil (Tesseract.js, chargé à la demande)
+js/ai.js                Claude (Haiku 5.5) : clé, coût et plafond, assistant, lecture des captures
+js/ai-tools.js          outils de l'assistant : calculs en lecture seule sur les données locales
+vendor/anthropic/       SDK officiel Anthropic, version navigateur (chargé seulement si l'IA est activée)
 vendor/tesseract/       moteur de lecture et modèle français (licences dans le dossier)
 js/charts.js            graphiques SVG et info-bulles
 js/views/*.js           une vue par rubrique

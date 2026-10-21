@@ -225,12 +225,30 @@ Un compte de type « Titres-restaurant, chèques… » suit une carte ou un carn
 
 **Mesure** (captures fictives d'application bancaire, claire et sombre, 1 170 px de large) : 10 opérations sur 10 reconnues avec la bonne date, le bon montant et la bonne catégorie. Lecture des 2 captures en 1,9 s, moteur compris. Un seul libellé contient une erreur de lecture (« Lid! » pour « Lidl »), corrigeable dans l'aperçu.
 
-## 13. Limites
+## 13. Assistant IA
+
+**Choix du fournisseur.** L'offre gratuite de l'API Gemini a été écartée. Dans cette offre, Google peut utiliser les contenus envoyés pour améliorer ses produits, et des personnes peuvent les relire. Google déconseille lui-même d'y envoyer des informations sensibles ou personnelles, ce que sont des relevés bancaires. Ses conditions demandent en outre l'offre payante pour servir des utilisateurs de l'Union européenne. Enfin, ses quotas gratuits ne sont pas publiés et ont été fortement réduits fin 2025. Sources : [conditions de l'API Gemini](https://ai.google.dev/gemini/terms), [version préliminaire (clause UE)](https://ai.google.dev/gemini-api/terms_preview), [forum Google](https://discuss.ai.google.dev/t/gemini-api-paid-services-usage/78913), [analyse de Simon Willison](https://simonwillison.net/2024/Oct/17/gemini-terms-of-service), [quotas 2026](https://www.memetik.ai/guides/gemini-api-free-tier-limits).
+
+**Choix retenu.** Claude Haiku 5.5, le modèle le moins cher d'Anthropic, à 0,10 $ par million de jetons lus et 0,50 $ écrits. Il est appelé depuis le navigateur avec la clé de l'utilisateur, via le SDK officiel (`dangerouslyAllowBrowser`). Le SDK est réuni en un seul fichier et hébergé dans `vendor/anthropic`. Aucun serveur n'est nécessaire et la clé ne quitte pas l'appareil, sauf vers Anthropic.
+
+**Assistant.** Dix outils en lecture seule, à schéma strict, décrits dans `js/ai-tools.js` et testés.
+- Claude choisit les calculs. Le navigateur les exécute sur les données locales et ne renvoie que leur résultat : des totaux, et au plus 40 opérations pour une recherche.
+- La boucle est assurée par le Tool Runner du SDK, avec 8 tours au plus et un effort `medium`.
+- Les échanges précédents sont renvoyés en texte seul (les 6 derniers) : moins de jetons, donc moins de frais.
+
+**Lecture des captures.** L'image est découpée en morceaux d'au plus deux fois sa largeur, réduite à 1 568 px et envoyée en JPEG. La sortie JSON structurée (`output_config.format`) renvoie la date, le libellé, le montant, le sens et la catégorie. L'effort est `low`. En cas d'échec, la lecture se fait sur l'appareil.
+
+**Coût maîtrisé.** Le coût de chaque réponse est calculé d'après les jetons facturés (`usage`) et cumulé par mois. Au-delà du plafond choisi, Pécule bloque les demandes avant tout envoi. La clé est vérifiée par la fiche du modèle (`models.retrieve`), qui ne consomme rien.
+
+**Vérification.** Le parcours complet a été testé dans le navigateur avec des réponses simulées de l'API : clé refusée puis valide, boucle d'outils, consommation, lecture d'une capture, plafond, erreurs. Aucun appel réel n'a été fait faute de clé : les réponses réelles de Claude restent à vérifier avec la vôtre.
+
+## 14. Limites
 
 - Les conseils sont indicatifs et ne remplacent pas un conseiller financier.
 - Les taux et plafonds sont datés (`REFERENCE.ratesDate`) et doivent être mis à jour à chaque révision.
 - La prévision de trésorerie ignore par défaut les revenus variables (case à cocher pour les inclure).
 - La détection d'abonnements ne voit que ce qui passe par vos comptes : un abonnement payé via un magasin d'applications apparaît sous le nom du magasin.
 - Les budgets proposés par l'assistant de démarrage sont un point de départ, pas une norme. Ils reprennent une part de ce qui reste après les charges fixes et l'épargne, avec un plafond par adulte (par exemple 300 € de courses), puis s'ajustent avec les vraies dépenses (bouton « Suggérer » des budgets).
+- Les réponses de l'assistant peuvent contenir des erreurs : les montants viennent des calculs de l'application, mais leur interprétation reste à vérifier. Le coût affiché est une estimation ; seule la console Anthropic fait foi.
 - La lecture des captures dépend de la netteté et de la mise en page de l'application bancaire : vérifiez les montants avant d'ajouter les opérations.
 - Les droits aux aides familiales sont des estimations : seule la CAF les calcule (situation, ressources exactes, date de déclaration de grossesse). Le revenu fiscal de référence est estimé à 90 % des revenus nets annuels s'il n'est pas saisi. Le CMG et la PreParE sont simplifiés ou non calculés.

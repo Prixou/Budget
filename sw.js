@@ -6,8 +6,8 @@
 const VERSION = 'dev';
 const CACHE = `pecule-${VERSION}`;
 const FONTS = 'pecule-polices';
-// Versionné avec les fichiers de vendor/tesseract : à changer lors d'une mise à jour du moteur.
-const OCR = 'pecule-lecture-tesseract-7.0.0';
+// Bibliothèques de vendor/ (lecture des captures, SDK Claude) : nom à changer quand elles sont mises à jour.
+const OCR = 'pecule-bibliotheques-tesseract-7.0.0-sdk-0.131.0';
 const ASSETS = [
   './',
   'index.html',
@@ -16,6 +16,8 @@ const ASSETS = [
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'js/ai-tools.js',
+  'js/ai.js',
   'js/app.js',
   'js/benefits.js',
   'js/calc.js',
@@ -37,6 +39,7 @@ const ASSETS = [
   'js/ui.js',
   'js/utils.js',
   'js/views/accounts.js',
+  'js/views/assistant.js',
   'js/views/bebe.js',
   'js/views/budgets.js',
   'js/views/categories.js',
@@ -96,7 +99,7 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // Moteur de lecture des captures (plusieurs Mo) : téléchargé à la première utilisation, puis gardé.
+  // Bibliothèques chargées à la demande (lecture des captures, SDK Claude) : gardées après la première utilisation.
   if (url.pathname.includes('/vendor/')) {
     event.respondWith(
       caches.open(OCR).then((cache) =>

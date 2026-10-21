@@ -5,6 +5,35 @@ import { exportData, importData, loadDemo, requestPersistence, storageInfo, stor
 import { confirmDialog, icon, offerFile, options, pickFile, toast } from '../ui.js';
 import { formatDate, formatMoney, formatNumber, html, pluralize, raw, todayISO } from '../utils.js';
 import { openStartFresh } from '../onboarding.js';
+import { AI_MODEL_LABEL, aiSettings, explainError, formatDollars as dollars, getApiKey, monthSpend, setApiKey, testApiKey } from '../ai.js';
+
+function aiCard(state) {
+  const ai = aiSettings(state);
+  const key = getApiKey();
+  const usage = state.settings.aiUsage;
+  return html`<section class="card stack-v" id="ai-settings">
+    <h2>Intelligence artificielle</h2>
+    <p class="muted small">L’assistant et la lecture des captures utilisent ${AI_MODEL_LABEL}, le modèle le plus économique d’Anthropic, avec votre propre clé API, facturée à l’usage par Anthropic : environ 0,2 centime par question. Rien n’est envoyé tant que vous ne posez pas de question.</p>
+    <label class="check"><input type="checkbox" id="ai-enabled" ${ai.enabled ? raw('checked') : ''}><span>Activer l’intelligence artificielle</span></label>
+    <div class="field"><span class="label">Clé API Anthropic</span>
+      <div class="row key-row">
+        <input class="input" type="password" id="ai-key" autocomplete="off" spellcheck="false" placeholder="${key ? `Clé enregistrée (…${key.slice(-4)})` : 'sk-ant-…'}">
+        <button type="button" class="btn" id="ai-key-save">${icon('check', { size: 16 })} ${key ? 'Remplacer' : 'Enregistrer'}</button>
+        ${key ? html`<button type="button" class="btn btn-ghost" id="ai-key-remove">Retirer</button>` : ''}
+      </div>
+      <span class="hint">À créer sur <a href="https://platform.claude.com" target="_blank" rel="noopener">platform.claude.com</a> (menu « API Keys »). Elle reste dans ce navigateur, n’est jamais incluse dans vos sauvegardes, et n’est envoyée qu’à Anthropic.</span>
+    </div>
+    <label class="field"><span>Plafond de dépense par mois</span>
+      <div class="input-with-suffix"><input class="input" id="ai-cap" type="number" min="0" step="0.5" value="${ai.monthlyCap / 100}"><span class="suffix">$</span></div>
+      <span class="hint">Pécule bloque les demandes au-delà (0 = sans plafond). Fixez aussi une limite dans la console Anthropic, qui seule fait foi.</span>
+    </label>
+    <label class="check"><input type="checkbox" id="ai-captures" ${ai.captures ? raw('checked') : ''}><span>Lire les captures d’écran avec Claude <span class="muted">(sinon, lecture gratuite sur l’appareil)</span></span></label>
+    <p class="small">Ce mois-ci : <strong>${dollars(monthSpend(state))}</strong>${usage?.requests && usage.month === todayISO().slice(0, 7) ? ` (${pluralize(usage.requests, 'demande')})` : ''}${ai.monthlyCap > 0 ? ` sur ${dollars(ai.monthlyCap)} de plafond` : ''}.</p>
+    <details class="disclosure"><summary>Ce qui est envoyé à Anthropic ${icon('down', { size: 14 })}</summary>
+      <p class="small muted" style="margin-top:8px">Pour l’assistant : votre question, le prénom du foyer, et les résultats des calculs dont la réponse a besoin (totaux, budgets, et au plus 40 opérations pour une recherche). Pour la lecture : l’image de la capture. Par défaut, Anthropic n’utilise pas les données envoyées à son API pour entraîner ses modèles ; elles sont conservées un temps limité, notamment pour la sécurité. La conversation n’est pas enregistrée dans Pécule.</p>
+    </details>
+  </section>`;
+}
 
 export default {
   id: 'parametres',
@@ -56,6 +85,8 @@ export default {
             s.lepEligible,
           )}</select><span class="hint">Revenu fiscal de référence 2024 inférieur ou égal à ${formatMoney(REFERENCE.lepIncomeLimitSingle, { decimals: false })} pour une part, ${formatMoney(REFERENCE.lepIncomeLimitCouple, { decimals: false })} pour un couple (plafonds 2026). Il figure sur votre avis d'imposition.</span></label>
         </section>
+
+        ${aiCard(state)}
 
         <section class="card stack-v">
           <h2>Sauvegarde et données</h2>
@@ -165,6 +196,45 @@ export default {
       toast("Données d'exemple chargées", { action: { label: 'Annuler', fn: () => store.undo() } });
     });
     root.querySelector('#set-reset').addEventListener('click', () => openStartFresh());
+
+    // Intelligence artificielle
+    const ai = () => aiSettings(store.state);
+    root.querySelector('#ai-enabled').addEventListener('change', (e) => {
+      updateSettings({ ai: { ...ai(), enabled: e.target.checked } });
+      if (e.target.checked && !getApiKey()) toast('Ajoutez maintenant votre clé API pour utiliser l’assistant.');
+    });
+    root.querySelector('#ai-captures').addEventListener('change', (e) => updateSettings({ ai: { ...ai(), captures: e.target.checked } }));
+    root.querySelector('#ai-cap').addEventListener('change', (e) => {
+      const value = Math.max(0, Number(String(e.target.value).replace(',', '.')) || 0);
+      updateSettings({ ai: { ...ai(), monthlyCap: Math.round(value * 100) } });
+    });
+    const keyInput = root.querySelector('#ai-key');
+    const saveKey = async () => {
+      const key = keyInput.value.trim();
+      if (!key) return toast('Collez d’abord votre clé API.', { tone: 'error' });
+      const button = root.querySelector('#ai-key-save');
+      button.disabled = true;
+      button.textContent = 'Vérification…';
+      try {
+        const model = await testApiKey(key);
+        if (!setApiKey(key)) return toast('Ce navigateur ne permet pas d’enregistrer la clé (navigation privée ?).', { tone: 'error' });
+        updateSettings({ ai: { ...ai(), enabled: true } });
+        toast(`Clé valide : ${model} est prêt. Essayez l’assistant !`, { action: { label: 'Ouvrir', fn: () => (location.hash = '#assistant') } });
+      } catch (error) {
+        toast(await explainError(error), { tone: 'error', duration: 8000 });
+        button.disabled = false;
+        button.textContent = 'Réessayer';
+      }
+    };
+    root.querySelector('#ai-key-save').addEventListener('click', saveKey);
+    keyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveKey();
+    });
+    root.querySelector('#ai-key-remove')?.addEventListener('click', () => {
+      setApiKey('');
+      updateSettings({ ai: { ...ai(), enabled: false } });
+      toast('Clé retirée de ce navigateur');
+    });
   },
 };
 

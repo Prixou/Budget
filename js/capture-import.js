@@ -1,9 +1,10 @@
 // Import par capture d'écran de l'application bancaire : lecture sur l'appareil, aperçu modifiable.
+import { aiReady, aiSettings, explainError, readCaptureWithClaude } from './ai.js';
 import { guessCategory, mergeCaptures, parseCapture } from './capture.js';
 import { learnCategories, markDuplicates } from './csv.js';
 import { openImportDialog } from './importer.js';
 import { ocrSupported, readImages, releaseOcr } from './ocr.js';
-import { importTransactions, store } from './store.js';
+import { importTransactions, store, updateSettings } from './store.js';
 import { accountOptions, categoryOptions, icon, openModal, toast } from './ui.js';
 import { centsToInput, formatMoney, html, isValidISODate, parseAmount, pluralize, raw, todayISO } from './utils.js';
 
@@ -41,7 +42,7 @@ export function openCaptureImport(initialFiles = []) {
     toast("Créez d'abord un compte.", { tone: 'error' });
     return;
   }
-  if (!ocrSupported()) {
+  if (!ocrSupported() && !aiReady()) {
     toast('Ce navigateur ne permet pas de lire les images. Utilisez un navigateur récent, ou importez un relevé CSV.', { tone: 'error' });
     return;
   }
@@ -61,7 +62,10 @@ export function openCaptureImport(initialFiles = []) {
         <span class="muted small">La liste des opérations dans l’application de votre banque. Vous pouvez aussi coller une image (Ctrl+V) ou la glisser ici.</span>
         <input type="file" id="cap-files" accept="image/*" multiple class="sr-only">
       </label>
-      <p class="muted small privacy-note">${icon('eye-off', { size: 14 })} L’image est lue sur votre appareil : elle n’est envoyée nulle part. La première lecture télécharge le moteur de lecture (environ 5 Mo), gardé ensuite en mémoire.</p>
+      ${aiReady()
+        ? html`<label class="check"><input type="checkbox" id="cap-ai" ${aiSettings().captures ? raw('checked') : ''}><span>Lire avec Claude <span class="muted">(plus fiable, environ 0,05 centime par capture)</span></span></label>`
+        : ''}
+      <p class="muted small privacy-note" data-privacy></p>
       <div class="capture-progress" data-progress hidden>
         <p class="small" data-progress-label>Préparation…</p>
         <div class="meter meter-ok" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Lecture des captures"><span class="meter-fill" data-progress-bar style="width:0%"></span></div>
@@ -81,7 +85,7 @@ export function openCaptureImport(initialFiles = []) {
         date: r.date,
         description: r.description,
         amount: r.type === 'income' ? r.amount : -r.amount,
-        categoryId: null,
+        categoryId: r.categoryId ?? null,
         signGuessed: r.signGuessed,
         fresh: true,
       });
@@ -132,7 +136,7 @@ export function openCaptureImport(initialFiles = []) {
               </table></div>
               <p class="muted small">Vérifiez les montants et les dates : la lecture automatique peut se tromper. Montant négatif = dépense, positif = revenu.${rows.some((r) => r.signGuessed) ? ' Les montants encadrés n’avaient pas de signe lisible : dépense par défaut, sauf salaire, remboursement, virement reçu…' : ''}</p>`
             : html`<div class="callout callout-warning">${icon('alert')}<div>Aucune opération reconnue. Essayez une capture plus nette, recadrée sur la liste des opérations (dates, libellés et montants visibles).</div></div>`}
-          <details class="disclosure"><summary>Texte lu sur ${texts.length > 1 ? 'les captures' : 'la capture'} ${icon('down', { size: 14 })}</summary><pre class="ocr-text">${texts.join('\n\n— — —\n\n')}</pre></details>
+          <details class="disclosure"><summary>Détail de la lecture ${icon('down', { size: 14 })}</summary><pre class="ocr-text">${texts.join('\n\n— — —\n\n')}</pre></details>
         `);
         if (focused) document.getElementById(focused)?.focus();
       };
@@ -144,15 +148,35 @@ export function openCaptureImport(initialFiles = []) {
         const label = el.querySelector('[data-progress-label]');
         const bar = el.querySelector('[data-progress-bar]');
         render();
-        try {
-          const read = await readImages(files, ({ label: what, progress: p, index, count, reading }) => {
-            label.textContent = `${count > 1 ? `Capture ${index + 1} sur ${count} : ` : ''}${what}${reading ? ` (${Math.round(p * 100)} %)` : '…'}`;
-            bar.style.width = `${Math.round(((index + (reading ? p : 0)) / count) * 100)}%`;
+        const today = todayISO();
+        const onDevice = async (list, offset = 0, count = list.length) => {
+          const read = await readImages(list, ({ label: what, progress: p, index, reading }) => {
+            const n = offset + index;
+            label.textContent = `${count > 1 ? `Capture ${n + 1} sur ${count} : ` : ''}${what}${reading ? ` (${Math.round(p * 100)} %)` : '…'}`;
+            bar.style.width = `${Math.round(((n + (reading ? p : 0)) / count) * 100)}%`;
           });
-          const today = todayISO();
-          for (const text of read) {
-            texts.push(text);
-            parsed.push(parseCapture(text, { today }).rows);
+          return read.map((text) => ({ text, rows: parseCapture(text, { today }).rows }));
+        };
+        try {
+          let results = [];
+          if (el.querySelector('#cap-ai')?.checked) {
+            // Lecture par Claude ; en cas d'échec, lecture sur l'appareil pour cette capture.
+            for (let i = 0; i < files.length; i++) {
+              label.textContent = `${files.length > 1 ? `Capture ${i + 1} sur ${files.length} : ` : ''}lecture par Claude…`;
+              bar.style.width = `${Math.round(((i + 0.3) / files.length) * 100)}%`;
+              try {
+                const found = await readCaptureWithClaude(files[i], { today });
+                const lines = found.map((r) => `${r.date}  ${r.description}  ${r.type === 'income' ? '+' : '-'}${(r.amount / 100).toFixed(2)} €`);
+                results.push({ text: [`Lu par Claude : ${pluralize(found.length, 'opération')}`, ...lines].join('\n'), rows: found });
+              } catch (error) {
+                toast(`${await explainError(error)} Lecture sur l’appareil à la place.`, { tone: 'error', duration: 8000 });
+                results.push(...(await onDevice([files[i]], i, files.length)));
+              }
+            }
+          } else results = await onDevice(files);
+          for (const r of results) {
+            texts.push(r.text);
+            parsed.push(r.rows);
           }
           // Les captures qui se chevauchent ne créent pas de doublons ; les choix déjà faits sont conservés.
           const merged = mergeCaptures(parsed);
@@ -172,6 +196,22 @@ export function openCaptureImport(initialFiles = []) {
           render();
         }
       };
+
+      // Où l'image est lue : sur l'appareil, ou par Claude si l'option est cochée.
+      const privacy = el.querySelector('[data-privacy]');
+      const aiBox = el.querySelector('#cap-ai');
+      const showPrivacy = () => {
+        privacy.innerHTML = String(
+          aiBox?.checked
+            ? html`${icon('info', { size: 14 })} L’image est envoyée à Claude (Anthropic) pour être lue, puis vous vérifiez le résultat avant l’ajout.`
+            : html`${icon('eye-off', { size: 14 })} L’image est lue sur votre appareil : elle n’est envoyée nulle part. La première lecture télécharge le moteur de lecture (environ 5 Mo), gardé ensuite en mémoire.`,
+        );
+      };
+      aiBox?.addEventListener('change', () => {
+        showPrivacy();
+        updateSettings({ ai: { ...aiSettings(), captures: aiBox.checked } });
+      });
+      showPrivacy();
 
       input.addEventListener('change', () => {
         run([...input.files]);

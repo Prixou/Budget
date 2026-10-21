@@ -8,6 +8,7 @@ import { exportData, loadDemo, processRecurring, requestPersistence, store, upda
 import { icon, offerFile, openModal, toast } from './ui.js';
 import { currentMonth, daysBetween, html, raw, setMoneyConfig, shiftMonth, todayISO } from './utils.js';
 import accounts from './views/accounts.js';
+import assistant from './views/assistant.js';
 import bebe from './views/bebe.js';
 import budgets from './views/budgets.js';
 import categories from './views/categories.js';
@@ -23,13 +24,13 @@ import settings from './views/settings.js';
 import tools from './views/tools.js';
 import transactions from './views/transactions.js';
 
-const VIEWS = [dashboard, transactions, budgets, accounts, recurring, goals, debts, couple, bebe, optimisation, reports, tools, categories, settings, demarrage];
+const VIEWS = [dashboard, transactions, budgets, accounts, recurring, goals, debts, couple, bebe, assistant, optimisation, reports, tools, categories, settings, demarrage];
 const BY_ID = new Map(VIEWS.map((v) => [v.id, v]));
 const NAV = [
   ['Suivi', ['tableau-de-bord', 'transactions', 'budgets', 'comptes']],
   ['Planifier', ['recurrentes', 'objectifs', 'dettes']],
   ['Famille', ['couple', 'bebe']],
-  ['Analyser', ['optimisation', 'rapports', 'simulateurs']],
+  ['Analyser', ['assistant', 'optimisation', 'rapports', 'simulateurs']],
   ['Réglages', ['parametres']],
 ];
 const TABS = ['tableau-de-bord', 'transactions', 'budgets', 'optimisation'];

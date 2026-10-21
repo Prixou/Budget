@@ -268,6 +268,8 @@ export function emptyState() {
       lastBackup: null,
       backupSnoozedUntil: null,
       setupDismissed: false, // liste « Pour bien démarrer » masquée
+      ai: { enabled: false, monthlyCap: 100, captures: true }, // IA (Claude) : plafond en centimes de dollar
+      aiUsage: null, // dépense estimée du mois : { month, cost (centimes de dollar), requests }
       dismissedTips: [],
       ignoredRecurring: [],
     },
